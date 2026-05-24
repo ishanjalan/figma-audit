@@ -5,6 +5,15 @@ name: Handover File (webhook)
 on:
   repository_dispatch:
     types: [figma-file-update]
+  workflow_dispatch:
+    inputs:
+      file_key:
+        description: 'Figma file key to audit'
+        required: true
+      file_name:
+        description: 'Figma file name (display only)'
+        required: false
+        default: 'manual run'
 
 permissions:
   contents: write
@@ -27,18 +36,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Debug payload
+      - name: Resolve file key
+        id: resolve
         run: |
-          echo "file_key=${{ github.event.client_payload.file_key }}"
-          echo "file_name=${{ github.event.client_payload.file_name }}"
-          echo "full payload: ${{ toJson(github.event.client_payload) }}"
+          # repository_dispatch sets client_payload; workflow_dispatch sets inputs
+          FILE_KEY="${{ github.event.client_payload.file_key || inputs.file_key }}"
+          FILE_NAME="${{ github.event.client_payload.file_name || inputs.file_name }}"
+          echo "file_key=${FILE_KEY}"
+          echo "file_name=${FILE_NAME}"
+          echo "file_key=${FILE_KEY}" >> "$GITHUB_OUTPUT"
 
       - name: Write .env from secrets
         run: |
           {
             echo "FIGMA_TOKEN=${{ secrets.FIGMA_TOKEN }}"
             echo "GCHAT_WEBHOOK_URL=${{ secrets.GCHAT_WEBHOOK_URL }}"
-            echo "FIGMA_FILE_KEY=${{ github.event.client_payload.file_key }}"
+            echo "FIGMA_FILE_KEY=${{ steps.resolve.outputs.file_key }}"
           } > .env
 
       - name: Audit file
