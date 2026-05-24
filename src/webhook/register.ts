@@ -62,23 +62,35 @@ function planApiId(): string | null {
 
 // ── List ──────────────────────────────────────────────────────────────────────
 
-async function listWebhooks(): Promise<Array<{ id: string; event_type: string; endpoint: string; status: string; context: { type: string; id: string } }>> {
+interface WebhookEntry { id: string; event_type: string; endpoint: string; status: string; team_id?: string; plan_api_id?: string }
+
+async function listWebhooks(): Promise<WebhookEntry[]> {
   const id = planApiId();
   if (!id) { console.error('FIGMA_HANDOVER_TEAM_IDS or FIGMA_ORG_ID required'); process.exit(1); }
 
   const data = await figmaFetch(`/webhooks?plan_api_id=${encodeURIComponent(id)}`);
-  const contexts = (data.contexts ?? []) as Array<{ webhooks: unknown[] }>;
-  const hooks = contexts.flatMap((c) => c.webhooks ?? []) as Array<{
-    id: string; event_type: string; endpoint: string; status: string;
-    context: { type: string; id: string };
-  }>;
+
+  // v2 list response: { webhooks: [...] }  (flat array, not nested under contexts)
+  // Log raw shape once so we can confirm the structure matches.
+  if (process.env.DEBUG_WEBHOOK) console.log('raw response:', JSON.stringify(data, null, 2));
+
+  // Try flat array first; fall back to the older contexts-nested shape just in case.
+  let hooks: WebhookEntry[];
+
+  if (Array.isArray(data.webhooks)) {
+    hooks = data.webhooks as WebhookEntry[];
+  } else {
+    const contexts = (data.contexts ?? []) as Array<{ webhooks: unknown[] }>;
+    hooks = contexts.flatMap((c) => c.webhooks ?? []) as WebhookEntry[];
+  }
 
   if (hooks.length === 0) {
     console.log('No webhooks registered.');
     return hooks;
   }
   for (const h of hooks) {
-    console.log(`  [${h.id}] ${h.event_type} → ${h.endpoint} (${h.status}) [${h.context.type}:${h.context.id}]`);
+    const scope = h.team_id ? `team:${h.team_id}` : (h.plan_api_id ?? '');
+    console.log(`  [${h.id}] ${h.event_type} → ${h.endpoint} (${h.status}) [${scope}]`);
   }
   return hooks;
 }
