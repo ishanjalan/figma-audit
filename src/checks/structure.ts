@@ -43,6 +43,22 @@ function hasIntentionalMarkers(node: FigmaNode): boolean {
   return false;
 }
 
+// A childless frame/group that has visible fills, strokes, or effects is a
+// leaf visual element (background block, image fill, decorative divider).
+// It renders something on its own — NOT actually empty, leave it alone.
+// Mirrors Handover plugin scanner.ts's empty-container guard.
+function isVisualLeaf(node: FigmaNode): boolean {
+  const hasVisibleFill =
+    Array.isArray(node.fills) && node.fills.some((f) => f.visible !== false);
+  const hasVisibleEffect =
+    Array.isArray(node.effects) && node.effects.some((e) => e.visible !== false);
+  const hasVisibleStroke =
+    Array.isArray(node.strokes) &&
+    node.strokes.some((s) => s.visible !== false) &&
+    (node.strokeWeight === undefined || node.strokeWeight > 0);
+  return hasVisibleFill || hasVisibleEffect || hasVisibleStroke;
+}
+
 function isComponentControlledVisibility(node: FigmaNode): boolean {
   // If `.visible` is bound to a component boolean property, it's an intentional
   // toggleable state (e.g. a `loading` prop showing a spinner), not dead weight.
@@ -87,8 +103,10 @@ function scanNode(node: FigmaNode, ctx: ScanCtx, issues: StructureIssue[]): void
 
   const children = node.children ?? [];
 
-  // Empty container.
-  if (CONTAINER_TYPES.has(node.type) && children.length === 0) {
+  // Empty container — but skip leaf visuals (background blocks, etc.) that
+  // have visible fills/strokes/effects. They render on their own and aren't
+  // dead weight. Mirrors Handover plugin scanner.
+  if (CONTAINER_TYPES.has(node.type) && children.length === 0 && !isVisualLeaf(node)) {
     issues.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, kind: 'empty-container', ...base });
   }
 

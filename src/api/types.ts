@@ -13,6 +13,8 @@ export interface FigmaNode {
   opacity?: number;
   children?: FigmaNode[];
   fills?: Array<{ type: string; visible?: boolean; opacity?: number }>;
+  strokes?: Array<{ type: string; visible?: boolean }>;
+  strokeWeight?: number;
   effects?: Array<{ type: string; visible?: boolean }>;
   layoutMode?: string;  // 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID' | future values
   layoutSizingHorizontal?: string;
@@ -49,6 +51,8 @@ export const FigmaNodeSchema: z.ZodType<FigmaNode> = z.lazy(() =>
     opacity: z.number().optional(),
     children: z.array(FigmaNodeSchema).optional(),
     fills: z.array(FigmaFillSchema).optional(),
+    strokes: z.array(z.object({ type: z.string(), visible: z.boolean().optional() })).optional(),
+    strokeWeight: z.number().optional(),
     effects: z.array(FigmaEffectSchema).optional(),
     layoutMode: z.string().optional(),  // permissive; Figma keeps adding values (GRID etc.)
     layoutSizingHorizontal: z.string().optional(),
