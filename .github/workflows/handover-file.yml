@@ -27,6 +27,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Debug payload
+        run: |
+          echo "file_key=${{ github.event.client_payload.file_key }}"
+          echo "file_name=${{ github.event.client_payload.file_name }}"
+          echo "full payload: ${{ toJson(github.event.client_payload) }}"
+
       - name: Write .env from secrets
         run: |
           {
