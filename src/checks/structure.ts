@@ -123,11 +123,23 @@ export function checkStructure(document: FigmaNode): StructureIssue[] {
   const issues: StructureIssue[] = [];
   for (const page of document.children ?? []) {
     for (const node of page.children ?? []) {
-      scanNode(
-        node,
-        { ancestors: [page.name], topLevelFrameId: node.id, topLevelFrameName: node.name },
-        issues,
-      );
+      if (node.type === 'SECTION') {
+        // Sections are screen-grouping containers — skip the section itself and
+        // treat each child frame as a top-level screen for pinning purposes.
+        for (const child of node.children ?? []) {
+          scanNode(
+            child,
+            { ancestors: [page.name, node.name], topLevelFrameId: child.id, topLevelFrameName: child.name },
+            issues,
+          );
+        }
+      } else {
+        scanNode(
+          node,
+          { ancestors: [page.name], topLevelFrameId: node.id, topLevelFrameName: node.name },
+          issues,
+        );
+      }
     }
   }
   return issues;

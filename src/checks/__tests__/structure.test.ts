@@ -50,6 +50,12 @@ describe('checkStructure', () => {
     expect(ids()).not.toContain('sec1');
   });
 
+  it('pins issues inside a top-level SECTION to the child frame, not the section', () => {
+    const issue = issues.find((i) => i.nodeId === 'sec-child');
+    expect(issue?.topLevelFrameId).toBe('sec-child');
+    expect(issue?.topLevelFrameName).toBe('Empty inside section');
+  });
+
   // ── detached-instance ───────────────────────────────────────────────────────
 
   it('flags an INSTANCE with no componentId', () => {
