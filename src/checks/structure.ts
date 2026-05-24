@@ -12,7 +12,7 @@
 // groups, groups-in-autolayout) via its Clean tab; trust those instead.
 import type { FigmaNode } from '../api/types.ts';
 
-export type StructureIssueKind = 'hidden' | 'empty-container';
+export type StructureIssueKind = 'hidden' | 'empty-container' | 'detached-instance';
 
 export interface StructureIssue {
   nodeId: string;
@@ -27,10 +27,6 @@ export interface StructureIssue {
 }
 
 const CONTAINER_TYPES = new Set(['FRAME', 'GROUP', 'COMPONENT']);
-
-// Instances inherit from their master — fix the source, not the copy.
-// Boolean op children are shape operands — flagging them would break the shape.
-const SKIP_TYPES = new Set(['INSTANCE', 'BOOLEAN_OPERATION']);
 
 // SECTION and COMPONENT_SET are organisational wrappers — pass through to
 // children without flagging the container itself.
@@ -90,7 +86,7 @@ function scanNode(node: FigmaNode, ctx: ScanCtx, issues: StructureIssue[]): void
     topLevelFrameName: ctx.topLevelFrameName,
   };
 
-  // Hidden layer — check BEFORE SKIP_TYPES so hidden instances are still caught.
+  // Hidden layer — checked before instance/boolean guards so hidden instances are caught.
   if (node.visible === false) {
     if (!isComponentControlledVisibility(node)) {
       issues.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, kind: 'hidden', ...base });
@@ -98,8 +94,16 @@ function scanNode(node: FigmaNode, ctx: ScanCtx, issues: StructureIssue[]): void
     return;  // no recursion — invisibility cascades
   }
 
-  // After visibility: skip instances and boolean-op children.
-  if (SKIP_TYPES.has(node.type)) return;
+  // After visibility: check instances before skipping their internals.
+  if (node.type === 'INSTANCE') {
+    // A missing/null componentId means the master component was deleted —
+    // this is an orphaned (detached) instance that will break in dev inspect.
+    if (!node.componentId) {
+      issues.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, kind: 'detached-instance', ...base });
+    }
+    return; // never recurse into instance internals
+  }
+  if (node.type === 'BOOLEAN_OPERATION') return;
 
   const children = node.children ?? [];
 

@@ -48,7 +48,7 @@ export function groupByFrame(
         total: 0,
         names: 0,
         structure: 0,
-        structureBreakdown: { hidden: 0, 'empty-container': 0 },
+        structureBreakdown: { hidden: 0, 'empty-container': 0, 'detached-instance': 0 },
         responsive: 0,
       };
       map.set(id, entry);
@@ -88,6 +88,7 @@ export function formatPinComment(s: PerFrameSummary): string {
     const parts: string[] = [];
     if (b.hidden > 0) parts.push(`${b.hidden} hidden`);
     if (b['empty-container'] > 0) parts.push(`${b['empty-container']} empty`);
+    if (b['detached-instance'] > 0) parts.push(`${b['detached-instance']} detached`);
     lines.push(`• ${s.structure} structural (${parts.join(', ')}) → Handover › Clean tab`);
   }
   if (s.responsive > 0) {

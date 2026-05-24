@@ -24,14 +24,24 @@ const STATE_FILE = '.handover-watch-state.json';
 interface WatchState {
   // fileKey → lastModified ISO of the version we already commented on.
   lastCommented: Record<string, string>;
+  // fileKey → frameId → commentId (for pin comments posted by this tool).
+  // Used to resolve (delete) pins on screens that are now clean.
+  pinnedComments: Record<string, Record<string, string>>;
+  // fileKey → summary commentId (top-level unanchored comment).
+  summaryComments: Record<string, string>;
 }
 
 function loadState(): WatchState {
-  if (!existsSync(STATE_FILE)) return { lastCommented: {} };
+  if (!existsSync(STATE_FILE)) return { lastCommented: {}, pinnedComments: {}, summaryComments: {} };
   try {
-    return JSON.parse(readFileSync(STATE_FILE, 'utf-8'));
+    const s = JSON.parse(readFileSync(STATE_FILE, 'utf-8')) as Partial<WatchState>;
+    return {
+      lastCommented: s.lastCommented ?? {},
+      pinnedComments: s.pinnedComments ?? {},
+      summaryComments: s.summaryComments ?? {},
+    };
   } catch {
-    return { lastCommented: {} };
+    return { lastCommented: {}, pinnedComments: {}, summaryComments: {} };
   }
 }
 
@@ -65,6 +75,17 @@ async function postComment(
   return (await res.json()) as CommentResponse;
 }
 
+async function deleteComment(token: string, fileKey: string, commentId: string): Promise<void> {
+  const res = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments/${commentId}`, {
+    method: 'DELETE',
+    headers: { 'X-Figma-Token': token },
+  });
+  // 404 is fine — comment was already deleted or the file no longer exists.
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Comment DELETE failed ${res.status}: ${await res.text()}`);
+  }
+}
+
 function figmaFileUrl(key: string): string {
   return `https://www.figma.com/design/${key}`;
 }
@@ -81,15 +102,20 @@ async function pingGChat(
   counts: {
     names: number;
     structure: number;
-    structureBreakdown?: { hidden: number; emptyContainer: number };
+    structureBreakdown?: { hidden: number; emptyContainer: number; detachedInstance: number };
     responsive: number;
   },
 ): Promise<void> {
   const total = counts.names + counts.structure + counts.responsive;
   const b = counts.structureBreakdown;
-  const structureDetail = b
-    ? `${counts.structure} (${b.hidden} hidden · ${b.emptyContainer} empty)`
-    : `${counts.structure}`;
+  let structureDetail = `${counts.structure}`;
+  if (b) {
+    const parts: string[] = [];
+    if (b.hidden > 0) parts.push(`${b.hidden} hidden`);
+    if (b.emptyContainer > 0) parts.push(`${b.emptyContainer} empty`);
+    if (b.detachedInstance > 0) parts.push(`${b.detachedInstance} detached`);
+    if (parts.length) structureDetail = `${counts.structure} (${parts.join(' · ')})`;
+  }
   const summary = [
     `📛 Names: ${counts.names} → Handover › Names tab`,
     `🧹 Structure: ${structureDetail} → Handover › Clean tab`,
@@ -140,7 +166,7 @@ async function pingGChat(
 function formatComment(counts: {
   names: number;
   structure: number;
-  structureBreakdown?: { hidden: number; emptyContainer: number };
+  structureBreakdown?: { hidden: number; emptyContainer: number; detachedInstance: number };
   responsive: number;
 }): string {
   const total = counts.names + counts.structure + counts.responsive;
@@ -157,6 +183,7 @@ function formatComment(counts: {
     if (b) {
       if (b.hidden > 0) parts.push(`${b.hidden} hidden`);
       if (b.emptyContainer > 0) parts.push(`${b.emptyContainer} empty container${b.emptyContainer !== 1 ? 's' : ''}`);
+      if (b.detachedInstance > 0) parts.push(`${b.detachedInstance} detached instance${b.detachedInstance !== 1 ? 's' : ''}`);
     }
     const detail = parts.length ? ` (${parts.join(', ')})` : '';
     lines.push(`• ${counts.structure} structural issue${counts.structure !== 1 ? 's' : ''}${detail} → fix in Handover plugin → Clean tab`);
@@ -205,6 +232,12 @@ async function main() {
     }
 
     for (const f of files) {
+      // Opt-out: designer added [no-audit] to the file name.
+      if (/\[no-audit\]/i.test(f.name)) {
+        console.log(`  ${f.name} — skipped ([no-audit])`);
+        continue;
+      }
+
       // Skip if we've already commented on this exact version.
       if (state.lastCommented[f.key] === f.last_modified) {
         skippedUnchanged++;
@@ -223,30 +256,72 @@ async function main() {
           structureBreakdown: {
             hidden: structureIssues.filter((i) => i.kind === 'hidden').length,
             emptyContainer: structureIssues.filter((i) => i.kind === 'empty-container').length,
+            detachedInstance: structureIssues.filter((i) => i.kind === 'detached-instance').length,
           },
           responsive: responsiveIssues.length,
         };
         const total = counts.names + counts.structure + counts.responsive;
 
+        // ── Resolve stale pins on frames that are now clean ──────────────────
+        const dirtyFrameIds = new Set([
+          ...nameIssues.map((i) => i.topLevelFrameId),
+          ...structureIssues.map((i) => i.topLevelFrameId),
+          ...responsiveIssues.map((i) => i.topLevelFrameId),
+        ]);
+        const previousPins = state.pinnedComments[f.key] ?? {};
+        let pinsResolved = 0;
+        const remainingPins: Record<string, string> = {};
+        for (const [frameId, commentId] of Object.entries(previousPins)) {
+          if (!dirtyFrameIds.has(frameId)) {
+            try {
+              await deleteComment(token, f.key, commentId);
+              pinsResolved++;
+            } catch (err) {
+              console.log(`    resolve pin ${commentId} failed: ${err instanceof Error ? err.message : String(err)}`);
+              remainingPins[frameId] = commentId; // keep tracking if delete failed
+            }
+          } else {
+            remainingPins[frameId] = commentId; // still dirty — keep existing pin, don't re-post
+          }
+        }
+        state.pinnedComments[f.key] = remainingPins;
+
         if (total === 0) {
+          // Whole file is clean — also remove the old summary comment if we have one.
+          const prevSummary = state.summaryComments[f.key];
+          if (prevSummary) {
+            try {
+              await deleteComment(token, f.key, prevSummary);
+              delete state.summaryComments[f.key];
+            } catch { /* ignore */ }
+          }
           state.lastCommented[f.key] = f.last_modified;
           skippedClean++;
-          console.log('✓ clean');
+          const resolveNote = pinsResolved > 0 ? ` (resolved ${pinsResolved} pin${pinsResolved !== 1 ? 's' : ''})` : '';
+          console.log(`✓ clean${resolveNote}`);
           continue;
         }
 
-        // 1. File-level summary comment (un-anchored).
-        await postComment(token, f.key, formatComment(counts));
+        // ── Post new summary comment ─────────────────────────────────────────
+        // Replace the old summary comment so we don't pile up.
+        const prevSummaryId = state.summaryComments[f.key];
+        if (prevSummaryId) {
+          try { await deleteComment(token, f.key, prevSummaryId); } catch { /* ignore */ }
+        }
+        const summaryComment = await postComment(token, f.key, formatComment(counts));
+        state.summaryComments[f.key] = summaryComment.id;
 
-        // 2. Per-screen pin comments anchored to the top-level frames with
-        //    the most issues. Capped at 10 to avoid spamming the file.
-        const pins = buildPinComments(
-          groupByFrame(nameIssues, structureIssues, responsiveIssues, 10),
-        );
+        // ── Post new pin comments for newly-dirty frames ─────────────────────
+        // Skip frames that already have a tracked pin (avoid duplicates).
+        const alreadyPinned = new Set(Object.keys(state.pinnedComments[f.key] ?? {}));
+        const summaries = groupByFrame(nameIssues, structureIssues, responsiveIssues, 10);
+        const pins = buildPinComments(summaries.filter((s) => !alreadyPinned.has(s.topLevelFrameId)));
         let pinsPosted = 0;
         for (const pin of pins) {
           try {
-            await postComment(token, f.key, pin.message, pin.clientMeta);
+            const pinComment = await postComment(token, f.key, pin.message, pin.clientMeta);
+            state.pinnedComments[f.key] ??= {};
+            state.pinnedComments[f.key][pin.topLevelFrameId] = pinComment.id;
             pinsPosted++;
           } catch (err) {
             // Pin may fail if the target node was deleted between fetch and post.
@@ -257,16 +332,20 @@ async function main() {
         state.lastCommented[f.key] = f.last_modified;
         commented++;
 
-        const pinNote = pinsPosted > 0 ? ` + ${pinsPosted} pin${pinsPosted !== 1 ? 's' : ''}` : '';
+        const pinNote = [
+          pinsPosted > 0 ? `+${pinsPosted} pin${pinsPosted !== 1 ? 's' : ''}` : '',
+          pinsResolved > 0 ? `✓${pinsResolved} resolved` : '',
+        ].filter(Boolean).join(' ');
+        const pinSuffix = pinNote ? ` (${pinNote})` : '';
         if (gchatUrl) {
           try {
             await pingGChat(gchatUrl, file.name, f.key, counts);
-            console.log(`commented${pinNote} + chat ping (${total} issues)`);
+            console.log(`commented${pinSuffix} + chat ping (${total} issues)`);
           } catch (err) {
-            console.log(`commented${pinNote} (${total} issues) · chat ping failed: ${err instanceof Error ? err.message : String(err)}`);
+            console.log(`commented${pinSuffix} (${total} issues) · chat ping failed: ${err instanceof Error ? err.message : String(err)}`);
           }
         } else {
-          console.log(`commented${pinNote} (${total} issues)`);
+          console.log(`commented${pinSuffix} (${total} issues)`);
         }
       } catch (err) {
         errored++;

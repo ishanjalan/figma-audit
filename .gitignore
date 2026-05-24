@@ -8,9 +8,9 @@ node_modules/
 dist/
 web/dist/
 
-# Audit artifacts
+# Audit artifacts (per-run JSON exports — uploaded as GH Actions artifacts, not committed)
 audit-*.json
-.handover-watch-state.json
+# .handover-watch-state.json is intentionally committed — see handover-watch.yml
 
 # macOS
 .DS_Store

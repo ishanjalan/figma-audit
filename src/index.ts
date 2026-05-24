@@ -25,6 +25,7 @@ const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 
 function shouldExclude(name: string, lastModified: string): { excluded: boolean; reason?: string } {
   if (/\[archive\]/i.test(name)) return { excluded: true, reason: '[archive]' };
+  if (/\[no-audit\]/i.test(name)) return { excluded: true, reason: '[no-audit]' };
   if (Date.now() - new Date(lastModified).getTime() > NINETY_DAYS_MS) {
     return { excluded: true, reason: 'inactive >90d' };
   }

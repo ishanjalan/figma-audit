@@ -28,6 +28,11 @@ export interface FigmaNode {
   exportSettings?: unknown[];                           // configured for export
   annotations?: unknown[];                              // design spec markers
   componentPropertyReferences?: Record<string, string>; // ".visible" → bound to component bool
+
+  // Instance tracking — populated on INSTANCE type nodes.
+  // When the master component is deleted, componentId is absent/null,
+  // making this a detached (orphaned) instance.
+  componentId?: string | null;
 }
 
 const FigmaFillSchema = z.object({
@@ -67,6 +72,7 @@ export const FigmaNodeSchema: z.ZodType<FigmaNode> = z.lazy(() =>
     exportSettings: z.array(z.unknown()).optional(),
     annotations: z.array(z.unknown()).optional(),
     componentPropertyReferences: z.record(z.string()).optional(),
+    componentId: z.string().nullish(),
   })
 );
 
