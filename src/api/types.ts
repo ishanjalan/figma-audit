@@ -19,6 +19,13 @@ export interface FigmaNode {
   layoutSizingVertical?: string;
   constraints?: { horizontal: string; vertical: string };
   absoluteBoundingBox?: { x: number; y: number; width: number; height: number } | null;
+
+  // Skip-signals — when present, the node is intentional and must not be flagged.
+  // Mirrors the Handover plugin's scanner guards so audit & plugin stay aligned.
+  reactions?: unknown[];                                // prototype interactions
+  exportSettings?: unknown[];                           // configured for export
+  annotations?: unknown[];                              // design spec markers
+  componentPropertyReferences?: Record<string, string>; // ".visible" → bound to component bool
 }
 
 const FigmaFillSchema = z.object({
@@ -52,6 +59,10 @@ export const FigmaNodeSchema: z.ZodType<FigmaNode> = z.lazy(() =>
     absoluteBoundingBox: z
       .object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })
       .nullish(),
+    reactions: z.array(z.unknown()).optional(),
+    exportSettings: z.array(z.unknown()).optional(),
+    annotations: z.array(z.unknown()).optional(),
+    componentPropertyReferences: z.record(z.string()).optional(),
   })
 );
 

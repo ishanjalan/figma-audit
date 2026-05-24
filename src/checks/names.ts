@@ -12,8 +12,16 @@ export interface NameIssue {
   path: string;
 }
 
+function hasIntentionalMarkers(node: FigmaNode): boolean {
+  if (node.reactions && node.reactions.length > 0) return true;
+  if (node.exportSettings && node.exportSettings.length > 0) return true;
+  if (node.annotations && node.annotations.length > 0) return true;
+  return false;
+}
+
 function scanNode(node: FigmaNode, ancestors: string[], issues: NameIssue[]): void {
   if (node.locked) return;
+  if (hasIntentionalMarkers(node)) return;
 
   if (GENERIC_NAME_RE.test(node.name.trim())) {
     issues.push({

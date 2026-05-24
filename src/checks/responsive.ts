@@ -19,8 +19,20 @@ function isResponsive(node: FigmaNode): boolean {
   return false;
 }
 
+function hasIntentionalMarkers(node: FigmaNode): boolean {
+  if (node.reactions && node.reactions.length > 0) return true;
+  if (node.exportSettings && node.exportSettings.length > 0) return true;
+  if (node.annotations && node.annotations.length > 0) return true;
+  return false;
+}
+
 function scanNode(node: FigmaNode, ancestors: string[], issues: ResponsiveIssue[]): void {
   if (node.locked || node.visible === false) return;
+  if (hasIntentionalMarkers(node)) return;
+
+  // Don't recurse into instances — fix the master component, not every copy.
+  // BOOLEAN_OPERATION children are shape operands, never independently responsive.
+  if (node.type === 'INSTANCE' || node.type === 'BOOLEAN_OPERATION') return;
 
   if (node.type === 'FRAME' || node.type === 'COMPONENT') {
     if (!isResponsive(node)) {
