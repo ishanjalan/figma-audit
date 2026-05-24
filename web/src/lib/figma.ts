@@ -64,7 +64,10 @@ export interface FileContent {
 }
 
 export async function getFile(token: string, key: string): Promise<FileContent> {
-  const res = await apiFetch(token, `/files/${key}?depth=6`);
+  // No depth limit — depth=N returns boundary containers with `children`
+  // omitted, which would be miscounted as empty containers. Fetch the
+  // full tree so the audit matches the in-Figma sandbox view.
+  const res = await apiFetch(token, `/files/${key}`);
   if (!res.ok) {
     throw new Error(`Failed to fetch file (${res.status}): ${await res.text()}`);
   }

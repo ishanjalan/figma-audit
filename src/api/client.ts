@@ -64,8 +64,11 @@ export interface FileContent {
 }
 
 export async function getFile(token: string, key: string): Promise<FileContent> {
-  // depth=6 gives us enough tree coverage without fetching the entire file.
-  const raw = await apiFetch(`${BASE}/files/${key}?depth=6`, token);
+  // No depth limit — at depth=N, containers at the boundary come back with
+  // their children array omitted, which our empty-container check then
+  // wrongly flags. Fetch the full tree so the audit matches what the
+  // Handover plugin sees in the Figma sandbox.
+  const raw = await apiFetch(`${BASE}/files/${key}`, token);
   const parsed = FileResponseSchema.parse(raw);
   return {
     key,

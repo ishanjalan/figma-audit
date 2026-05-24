@@ -56,6 +56,6 @@ export function formatComment(counts: AuditCounts): string {
     lines.push(`• ${counts.responsive} frame${counts.responsive !== 1 ? 's' : ''} lacking horizontal responsiveness → fix in Handover plugin → Fluid tab`);
   }
   lines.push('');
-  lines.push('💡 Open the file → Plugins menu → Handover. Each tab has a "Fix all" button.');
+  lines.push('💡 Open the file → Plugins menu → Handover. Set scope to "Page" (top-left toggle) and check every page — the audit covers the whole document. Each tab has a "Fix all" button.');
   return lines.join('\n');
 }
