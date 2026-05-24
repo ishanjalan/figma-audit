@@ -70,10 +70,7 @@ async function listWebhooks(): Promise<WebhookEntry[]> {
 
   const data = await figmaFetch(`/webhooks?plan_api_id=${encodeURIComponent(id)}`);
 
-  // v2 list response: { webhooks: [...] }  (flat array, not nested under contexts)
-  // Log raw shape once so we can confirm the structure matches.
-  if (process.env.DEBUG_WEBHOOK) console.log('raw response:', JSON.stringify(data, null, 2));
-
+  // v2 list response: { webhooks: [...] }  (flat array, paginated)
   // Try flat array first; fall back to the older contexts-nested shape just in case.
   let hooks: WebhookEntry[];
 
