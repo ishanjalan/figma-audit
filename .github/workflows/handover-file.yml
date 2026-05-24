@@ -1,0 +1,48 @@
+name: Handover File (webhook)
+
+# Triggered by the Pipedream relay when Figma fires a FILE_UPDATE event.
+# Audits only the single file that changed, then commits updated state.
+on:
+  repository_dispatch:
+    types: [figma-file-update]
+
+permissions:
+  contents: write
+
+jobs:
+  audit-file:
+    name: Audit ${{ github.event.client_payload.file_name }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write .env from secrets
+        run: |
+          {
+            echo "FIGMA_TOKEN=${{ secrets.FIGMA_TOKEN }}"
+            echo "GCHAT_WEBHOOK_URL=${{ secrets.GCHAT_WEBHOOK_URL }}"
+            echo "FIGMA_FILE_KEY=${{ github.event.client_payload.file_key }}"
+          } > .env
+
+      - name: Audit file
+        run: npm run handover-watch
+
+      - name: Commit updated state
+        if: always()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .handover-watch-state.json
+          git diff --staged --quiet || git commit -m "chore: update handover watch state [skip ci]"
+          git push
