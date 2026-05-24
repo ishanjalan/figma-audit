@@ -1,0 +1,48 @@
+name: Handover Watch
+
+on:
+  schedule:
+    - cron: '15 * * * *'   # Every hour at :15
+  workflow_dispatch:
+
+jobs:
+  watch:
+    name: Comment on handover files
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore watch state
+        id: cache-state
+        uses: actions/cache@v4
+        with:
+          path: .handover-watch-state.json
+          key: handover-watch-state-${{ github.run_id }}
+          restore-keys: |
+            handover-watch-state-
+
+      - name: Write .env from secrets
+        run: |
+          {
+            echo "FIGMA_TOKEN=${{ secrets.FIGMA_TOKEN }}"
+            echo "FIGMA_HANDOVER_PROJECT_IDS=${{ secrets.FIGMA_HANDOVER_PROJECT_IDS }}"
+          } > .env
+
+      - name: Run handover watcher
+        run: npm run handover-watch
+
+      - name: Save watch state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .handover-watch-state.json
+          key: handover-watch-state-${{ github.run_id }}

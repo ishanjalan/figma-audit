@@ -1,0 +1,43 @@
+name: Figma Audit
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # Every Monday at 09:00 UTC
+  workflow_dispatch:        # Allow manual runs from the Actions tab
+
+jobs:
+  audit:
+    name: Run audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write .env from secrets
+        run: |
+          {
+            echo "FIGMA_TOKEN=${{ secrets.FIGMA_TOKEN }}"
+            echo "FIGMA_ORG_ID=${{ secrets.FIGMA_ORG_ID }}"
+            echo "GCHAT_WEBHOOK_URL=${{ secrets.GCHAT_WEBHOOK_URL }}"
+          } > .env
+
+      - name: Discover teams and files (activity logs, last 90 days)
+        run: npm run discover
+
+      - name: Run audit (console + gchat + json)
+        run: npm run audit -- --output console,gchat,json --json-path audit-${{ github.run_id }}.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: figma-audit-${{ github.run_id }}
+          path: audit-*.json
+          retention-days: 90

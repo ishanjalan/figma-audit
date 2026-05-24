@@ -1,0 +1,16 @@
+# Secrets
+.env
+
+# Node
+node_modules/
+
+# Build output
+dist/
+web/dist/
+
+# Audit artifacts
+audit-*.json
+.handover-watch-state.json
+
+# macOS
+.DS_Store
