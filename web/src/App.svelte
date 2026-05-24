@@ -7,6 +7,7 @@
   let token = $state('');
   let projectId = $state('');
   let tokenStatus = $state<'unknown' | 'verifying' | 'valid' | 'invalid'>('unknown');
+  let tokenKind = $state<'pat' | 'plan'>('pat');
   let tokenEmail = $state('');
   let tokenError = $state('');
   let postComments = $state(true);
@@ -38,6 +39,7 @@
     if (!token.trim()) return;
     tokenStatus = 'verifying';
     const result = await verifyToken(token.trim());
+    tokenKind = result.kind;
     if (result.ok) {
       tokenStatus = 'valid';
       tokenEmail = result.email ?? '';
@@ -157,7 +159,11 @@
       {#if tokenStatus === 'valid'}
         <div class="token-valid">
           <span class="dot success"></span>
-          Authenticated as <strong>{tokenEmail}</strong>
+          {#if tokenKind === 'plan'}
+            Plan access token authenticated (org-wide access)
+          {:else}
+            Authenticated as <strong>{tokenEmail}</strong>
+          {/if}
           <button class="secondary small" onclick={clearToken}>Change</button>
         </div>
       {:else}
@@ -165,12 +171,13 @@
           id="token"
           type="password"
           bind:value={token}
-          placeholder="figd_..."
+          placeholder="figd_... or figp_..."
           onblur={verify}
         />
         <p class="hint">
-          Create one at <a href="https://www.figma.com/developers/api#access-tokens" target="_blank" rel="noopener">figma.com/developers</a>
-          (scopes: <code>file_content:read</code>, <code>file_comments:write</code>). Stored locally in this browser.
+          Accepts personal access tokens (<code>figd_</code>) and plan access tokens (<code>figp_</code>).
+          Create at <a href="https://www.figma.com/developers/api#access-tokens" target="_blank" rel="noopener">figma.com/developers</a>
+          — scopes: <code>file_content:read</code>, <code>file_comments:write</code>. Stored only in this browser.
         </p>
         {#if tokenStatus === 'verifying'}<p class="hint">Verifying…</p>{/if}
         {#if tokenStatus === 'invalid'}<p class="hint error">Couldn't verify: {tokenError}</p>{/if}

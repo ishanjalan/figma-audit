@@ -87,14 +87,29 @@ export async function postComment(token: string, key: string, message: string): 
   }
 }
 
-// Quick token validation: fetch /v1/me (PATs only; plan tokens won't work in browser).
-export async function verifyToken(token: string): Promise<{ ok: boolean; email?: string; error?: string }> {
+// Quick token validation. PATs (figd_) use /v1/me; plan tokens (figp_) use
+// /v1/activity_logs (the smallest endpoint plan tokens accept).
+export async function verifyToken(
+  token: string,
+): Promise<{ ok: boolean; kind: 'pat' | 'plan'; email?: string; error?: string }> {
+  const isPlan = token.trim().startsWith('figp_');
+  const kind: 'pat' | 'plan' = isPlan ? 'plan' : 'pat';
+
   try {
-    const res = await fetch(`${BASE}/me`, { headers: { 'X-Figma-Token': token } });
-    if (!res.ok) return { ok: false, error: `${res.status} ${res.statusText}` };
-    const data = await res.json();
-    return { ok: true, email: data.email };
+    if (isPlan) {
+      // /v1/me is excluded for plan tokens. Use activity_logs as a smoke test.
+      const res = await fetch(`${BASE}/activity_logs?limit=1`, {
+        headers: { 'X-Figma-Token': token },
+      });
+      if (!res.ok) return { ok: false, kind, error: `${res.status} ${res.statusText}` };
+      return { ok: true, kind };
+    } else {
+      const res = await fetch(`${BASE}/me`, { headers: { 'X-Figma-Token': token } });
+      if (!res.ok) return { ok: false, kind, error: `${res.status} ${res.statusText}` };
+      const data = await res.json();
+      return { ok: true, kind, email: data.email };
+    }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, kind, error: err instanceof Error ? err.message : String(err) };
   }
 }
