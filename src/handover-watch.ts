@@ -17,6 +17,7 @@ import { getProjectFiles, getFile } from './api/client.ts';
 import { checkNames } from './checks/names.ts';
 import { checkStructure } from './checks/structure.ts';
 import { checkResponsive } from './checks/responsive.ts';
+import { groupByFrame, buildPinComments } from './pin-comments.ts';
 
 const STATE_FILE = '.handover-watch-state.json';
 
@@ -44,11 +45,19 @@ interface CommentResponse {
   created_at: string;
 }
 
-async function postComment(token: string, fileKey: string, message: string): Promise<CommentResponse> {
+async function postComment(
+  token: string,
+  fileKey: string,
+  message: string,
+  clientMeta?: { node_id: string; node_offset: { x: number; y: number } },
+): Promise<CommentResponse> {
+  const body: Record<string, unknown> = { message };
+  if (clientMeta) body.client_meta = clientMeta;
+
   const res = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments`, {
     method: 'POST',
     headers: { 'X-Figma-Token': token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     throw new Error(`Comment POST failed ${res.status}: ${await res.text()}`);
@@ -205,15 +214,17 @@ async function main() {
       process.stdout.write(`  ${f.name} … `);
       try {
         const file = await getFile(token, f.key);
+        const nameIssues = checkNames(file.document);
         const structureIssues = checkStructure(file.document);
+        const responsiveIssues = checkResponsive(file.document);
         const counts = {
-          names: checkNames(file.document).length,
+          names: nameIssues.length,
           structure: structureIssues.length,
           structureBreakdown: {
             hidden: structureIssues.filter((i) => i.kind === 'hidden').length,
             emptyContainer: structureIssues.filter((i) => i.kind === 'empty-container').length,
           },
-          responsive: checkResponsive(file.document).length,
+          responsive: responsiveIssues.length,
         };
         const total = counts.names + counts.structure + counts.responsive;
 
@@ -224,19 +235,38 @@ async function main() {
           continue;
         }
 
+        // 1. File-level summary comment (un-anchored).
         await postComment(token, f.key, formatComment(counts));
+
+        // 2. Per-screen pin comments anchored to the top-level frames with
+        //    the most issues. Capped at 10 to avoid spamming the file.
+        const pins = buildPinComments(
+          groupByFrame(nameIssues, structureIssues, responsiveIssues, 10),
+        );
+        let pinsPosted = 0;
+        for (const pin of pins) {
+          try {
+            await postComment(token, f.key, pin.message, pin.clientMeta);
+            pinsPosted++;
+          } catch (err) {
+            // Pin may fail if the target node was deleted between fetch and post.
+            console.log(`    pin on ${pin.topLevelFrameId} failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+
         state.lastCommented[f.key] = f.last_modified;
         commented++;
 
+        const pinNote = pinsPosted > 0 ? ` + ${pinsPosted} pin${pinsPosted !== 1 ? 's' : ''}` : '';
         if (gchatUrl) {
           try {
             await pingGChat(gchatUrl, file.name, f.key, counts);
-            console.log(`commented + chat ping (${total} issues)`);
+            console.log(`commented${pinNote} + chat ping (${total} issues)`);
           } catch (err) {
-            console.log(`commented (${total} issues) · chat ping failed: ${err instanceof Error ? err.message : String(err)}`);
+            console.log(`commented${pinNote} (${total} issues) · chat ping failed: ${err instanceof Error ? err.message : String(err)}`);
           }
         } else {
-          console.log(`commented (${total} issues)`);
+          console.log(`commented${pinNote} (${total} issues)`);
         }
       } catch (err) {
         errored++;

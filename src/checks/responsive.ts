@@ -6,6 +6,8 @@ export interface ResponsiveIssue {
   nodeName: string;
   nodeType: string;
   path: string;
+  topLevelFrameId: string;
+  topLevelFrameName: string;
 }
 
 function isResponsive(node: FigmaNode): boolean {
@@ -26,7 +28,13 @@ function hasIntentionalMarkers(node: FigmaNode): boolean {
   return false;
 }
 
-function scanNode(node: FigmaNode, ancestors: string[], issues: ResponsiveIssue[]): void {
+interface ScanCtx {
+  ancestors: string[];
+  topLevelFrameId: string;
+  topLevelFrameName: string;
+}
+
+function scanNode(node: FigmaNode, ctx: ScanCtx, issues: ResponsiveIssue[]): void {
   if (node.locked || node.visible === false) return;
   if (hasIntentionalMarkers(node)) return;
 
@@ -40,13 +48,15 @@ function scanNode(node: FigmaNode, ancestors: string[], issues: ResponsiveIssue[
         nodeId: node.id,
         nodeName: node.name,
         nodeType: node.type,
-        path: ancestors.join(' › '),
+        path: ctx.ancestors.join(' › '),
+        topLevelFrameId: ctx.topLevelFrameId,
+        topLevelFrameName: ctx.topLevelFrameName,
       });
     }
   }
 
   for (const child of node.children ?? []) {
-    scanNode(child, [...ancestors, node.name], issues);
+    scanNode(child, { ...ctx, ancestors: [...ctx.ancestors, node.name] }, issues);
   }
 }
 
@@ -54,7 +64,11 @@ export function checkResponsive(document: FigmaNode): ResponsiveIssue[] {
   const issues: ResponsiveIssue[] = [];
   for (const page of document.children ?? []) {
     for (const node of page.children ?? []) {
-      scanNode(node, [page.name], issues);
+      scanNode(
+        node,
+        { ancestors: [page.name], topLevelFrameId: node.id, topLevelFrameName: node.name },
+        issues,
+      );
     }
   }
   return issues;

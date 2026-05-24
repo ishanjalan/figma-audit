@@ -2,6 +2,9 @@
 import { checkNames } from '../../../src/checks/names.ts';
 import { checkStructure } from '../../../src/checks/structure.ts';
 import { checkResponsive } from '../../../src/checks/responsive.ts';
+import type { NameIssue } from '../../../src/checks/names.ts';
+import type { StructureIssue } from '../../../src/checks/structure.ts';
+import type { ResponsiveIssue } from '../../../src/checks/responsive.ts';
 import type { FigmaNode } from '../../../src/api/types.ts';
 
 export interface StructureBreakdown {
@@ -17,21 +20,28 @@ export interface AuditCounts {
   total: number;
 }
 
-export function auditDocument(doc: FigmaNode): AuditCounts {
-  const names = checkNames(doc).length;
+export interface AuditResult {
+  counts: AuditCounts;
+  nameIssues: NameIssue[];
+  structureIssues: StructureIssue[];
+  responsiveIssues: ResponsiveIssue[];
+}
+
+export function auditDocument(doc: FigmaNode): AuditResult {
+  const nameIssues = checkNames(doc);
   const structureIssues = checkStructure(doc);
-  const structureBreakdown: StructureBreakdown = {
-    hidden: structureIssues.filter((i) => i.kind === 'hidden').length,
-    emptyContainer: structureIssues.filter((i) => i.kind === 'empty-container').length,
-  };
-  const responsive = checkResponsive(doc).length;
-  return {
-    names,
+  const responsiveIssues = checkResponsive(doc);
+  const counts: AuditCounts = {
+    names: nameIssues.length,
     structure: structureIssues.length,
-    structureBreakdown,
-    responsive,
-    total: names + structureIssues.length + responsive,
+    structureBreakdown: {
+      hidden: structureIssues.filter((i) => i.kind === 'hidden').length,
+      emptyContainer: structureIssues.filter((i) => i.kind === 'empty-container').length,
+    },
+    responsive: responsiveIssues.length,
+    total: nameIssues.length + structureIssues.length + responsiveIssues.length,
   };
+  return { counts, nameIssues, structureIssues, responsiveIssues };
 }
 
 export function formatComment(counts: AuditCounts): string {

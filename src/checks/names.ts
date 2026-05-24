@@ -10,6 +10,8 @@ export interface NameIssue {
   nodeName: string;
   nodeType: string;
   path: string;
+  topLevelFrameId: string;
+  topLevelFrameName: string;
 }
 
 function hasIntentionalMarkers(node: FigmaNode): boolean {
@@ -19,7 +21,13 @@ function hasIntentionalMarkers(node: FigmaNode): boolean {
   return false;
 }
 
-function scanNode(node: FigmaNode, ancestors: string[], issues: NameIssue[]): void {
+interface ScanCtx {
+  ancestors: string[];
+  topLevelFrameId: string;
+  topLevelFrameName: string;
+}
+
+function scanNode(node: FigmaNode, ctx: ScanCtx, issues: NameIssue[]): void {
   if (node.locked) return;
   if (hasIntentionalMarkers(node)) return;
 
@@ -28,7 +36,9 @@ function scanNode(node: FigmaNode, ancestors: string[], issues: NameIssue[]): vo
       nodeId: node.id,
       nodeName: node.name,
       nodeType: node.type,
-      path: ancestors.join(' › '),
+      path: ctx.ancestors.join(' › '),
+      topLevelFrameId: ctx.topLevelFrameId,
+      topLevelFrameName: ctx.topLevelFrameName,
     });
   }
 
@@ -36,7 +46,7 @@ function scanNode(node: FigmaNode, ancestors: string[], issues: NameIssue[]): vo
   if (node.type === 'INSTANCE' || node.type === 'BOOLEAN_OPERATION') return;
 
   for (const child of node.children ?? []) {
-    scanNode(child, [...ancestors, node.name], issues);
+    scanNode(child, { ...ctx, ancestors: [...ctx.ancestors, node.name] }, issues);
   }
 }
 
@@ -44,7 +54,11 @@ export function checkNames(document: FigmaNode): NameIssue[] {
   const issues: NameIssue[] = [];
   for (const page of document.children ?? []) {
     for (const node of page.children ?? []) {
-      scanNode(node, [page.name], issues);
+      scanNode(
+        node,
+        { ancestors: [page.name], topLevelFrameId: node.id, topLevelFrameName: node.name },
+        issues,
+      );
     }
   }
   return issues;

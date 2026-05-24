@@ -80,10 +80,23 @@ export async function getFile(token: string, key: string): Promise<FileContent> 
   };
 }
 
-export async function postComment(token: string, key: string, message: string): Promise<void> {
+export interface PinClientMeta {
+  node_id: string;
+  node_offset: { x: number; y: number };
+}
+
+export async function postComment(
+  token: string,
+  key: string,
+  message: string,
+  clientMeta?: PinClientMeta,
+): Promise<void> {
+  const body: Record<string, unknown> = { message };
+  if (clientMeta) body.client_meta = clientMeta;
+
   const res = await apiFetch(token, `/files/${key}/comments`, {
     method: 'POST',
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     throw new Error(`Failed to post comment (${res.status}): ${await res.text()}`);

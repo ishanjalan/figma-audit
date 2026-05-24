@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { getProjectFiles, getFile, postComment, pingGChat, verifyToken, type ProjectFile } from './lib/figma.ts';
   import { auditDocument, formatComment, type AuditCounts } from './lib/audit.ts';
+  import { groupByFrame, buildPinComments } from '../../src/pin-comments.ts';
 
   // ── State ─────────────────────────────────────────────────────────────────
   let token = $state('');
@@ -128,12 +129,27 @@
         const file = await getFile(token.trim(), row.key);
 
         rows[i] = { ...row, status: 'auditing', name: file.name };
-        const counts = auditDocument(file.document);
+        const result = auditDocument(file.document);
+        const counts = result.counts;
 
         if (counts.total === 0) {
           rows[i] = { ...rows[i], status: 'clean', counts };
         } else if (postComments) {
+          // 1. File-level summary comment (un-anchored).
           await postComment(token.trim(), row.key, formatComment(counts));
+
+          // 2. Per-screen pin comments — top 10 most-affected top-level frames.
+          const pins = buildPinComments(
+            groupByFrame(result.nameIssues, result.structureIssues, result.responsiveIssues, 10),
+          );
+          for (const pin of pins) {
+            try {
+              await postComment(token.trim(), row.key, pin.message, pin.clientMeta);
+            } catch {
+              // Pin may fail if node was deleted; keep going with the rest.
+            }
+          }
+
           // Fire-and-forget GChat ping (CORS-opaque, so we can't confirm).
           if (gchatWebhook.trim()) {
             try {

@@ -20,6 +20,10 @@ export interface StructureIssue {
   nodeType: string;
   kind: StructureIssueKind;
   path: string;
+  // Top-level frame on the page that contains this issue. Used to pin the
+  // audit comment on the actual screen instead of dropping it on page 1.
+  topLevelFrameId: string;
+  topLevelFrameName: string;
 }
 
 const CONTAINER_TYPES = new Set(['FRAME', 'GROUP', 'COMPONENT']);
@@ -45,15 +49,17 @@ function isComponentControlledVisibility(node: FigmaNode): boolean {
   return Boolean(node.componentPropertyReferences?.visible);
 }
 
-function scanNode(
-  node: FigmaNode,
-  ancestors: string[],
-  issues: StructureIssue[],
-): void {
+interface ScanCtx {
+  ancestors: string[];
+  topLevelFrameId: string;
+  topLevelFrameName: string;
+}
+
+function scanNode(node: FigmaNode, ctx: ScanCtx, issues: StructureIssue[]): void {
   // Organisational containers — pass through to children, don't flag the wrapper.
   if (PASSTHROUGH_TYPES.has(node.type)) {
     for (const child of node.children ?? []) {
-      scanNode(child, [...ancestors, node.name], issues);
+      scanNode(child, { ...ctx, ancestors: [...ctx.ancestors, node.name] }, issues);
     }
     return;
   }
@@ -61,12 +67,17 @@ function scanNode(
   if (node.locked) return;
   if (hasIntentionalMarkers(node)) return;
 
-  const path = ancestors.join(' › ');
+  const path = ctx.ancestors.join(' › ');
+  const base = {
+    path,
+    topLevelFrameId: ctx.topLevelFrameId,
+    topLevelFrameName: ctx.topLevelFrameName,
+  };
 
   // Hidden layer — check BEFORE SKIP_TYPES so hidden instances are still caught.
   if (node.visible === false) {
     if (!isComponentControlledVisibility(node)) {
-      issues.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, kind: 'hidden', path });
+      issues.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, kind: 'hidden', ...base });
     }
     return;  // no recursion — invisibility cascades
   }
@@ -78,11 +89,11 @@ function scanNode(
 
   // Empty container.
   if (CONTAINER_TYPES.has(node.type) && children.length === 0) {
-    issues.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, kind: 'empty-container', path });
+    issues.push({ nodeId: node.id, nodeName: node.name, nodeType: node.type, kind: 'empty-container', ...base });
   }
 
   for (const child of children) {
-    scanNode(child, [...ancestors, node.name], issues);
+    scanNode(child, { ...ctx, ancestors: [...ctx.ancestors, node.name] }, issues);
   }
 }
 
@@ -90,7 +101,11 @@ export function checkStructure(document: FigmaNode): StructureIssue[] {
   const issues: StructureIssue[] = [];
   for (const page of document.children ?? []) {
     for (const node of page.children ?? []) {
-      scanNode(node, [page.name], issues);
+      scanNode(
+        node,
+        { ancestors: [page.name], topLevelFrameId: node.id, topLevelFrameName: node.name },
+        issues,
+      );
     }
   }
   return issues;
