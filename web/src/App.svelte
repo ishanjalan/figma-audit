@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getProjectFiles, getFile, postComment, verifyToken, type ProjectFile } from './lib/figma.ts';
+  import { getProjectFiles, getFile, postComment, pingGChat, verifyToken, type ProjectFile } from './lib/figma.ts';
   import { auditDocument, formatComment, type AuditCounts } from './lib/audit.ts';
 
   // ── State ─────────────────────────────────────────────────────────────────
   let token = $state('');
   let projectId = $state('');
+  let gchatWebhook = $state('');
   let tokenStatus = $state<'unknown' | 'verifying' | 'valid' | 'invalid'>('unknown');
   let tokenKind = $state<'pat' | 'plan'>('pat');
   let tokenEmail = $state('');
@@ -33,6 +34,8 @@
     }
     const lastProject = localStorage.getItem('figma-last-project');
     if (lastProject) projectId = lastProject;
+    const savedWebhook = localStorage.getItem('gchat-webhook');
+    if (savedWebhook) gchatWebhook = savedWebhook;
   });
 
   async function verify() {
@@ -63,6 +66,8 @@
     if (!id || tokenStatus !== 'valid') return;
 
     localStorage.setItem('figma-last-project', id);
+    if (gchatWebhook.trim()) localStorage.setItem('gchat-webhook', gchatWebhook.trim());
+    else localStorage.removeItem('gchat-webhook');
 
     phase = 'running';
     rows = [];
@@ -94,6 +99,14 @@
           rows[i] = { ...rows[i], status: 'clean', counts };
         } else if (postComments) {
           await postComment(token.trim(), row.key, formatComment(counts));
+          // Fire-and-forget GChat ping (CORS-opaque, so we can't confirm).
+          if (gchatWebhook.trim()) {
+            try {
+              await pingGChat(gchatWebhook.trim(), file.name, row.key, counts);
+            } catch {
+              // no-cors response is unreadable; only network errors land here
+            }
+          }
           rows[i] = { ...rows[i], status: 'commented', counts };
         } else {
           rows[i] = { ...rows[i], status: 'skipped', counts };
@@ -202,6 +215,22 @@
         <input type="checkbox" bind:checked={postComments} disabled={tokenStatus !== 'valid'} />
         Post comments on files with issues (uncheck to dry-run)
       </label>
+    </section>
+
+    <section class="card">
+      <label for="gchat">Google Chat webhook (optional)</label>
+      <input
+        id="gchat"
+        type="text"
+        bind:value={gchatWebhook}
+        placeholder="https://chat.googleapis.com/v1/spaces/.../messages?key=..."
+        disabled={tokenStatus !== 'valid'}
+      />
+      <p class="hint">
+        If set, each commented file also pings this Chat space with a link back to the file.
+        Figma's own notifications only reach file watchers — this ensures the designer actually sees it.
+        Create an incoming webhook in your Chat space → Apps &amp; integrations → Webhooks.
+      </p>
     </section>
 
     <button onclick={run} disabled={tokenStatus !== 'valid' || !projectId.trim()}>

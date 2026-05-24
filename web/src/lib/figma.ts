@@ -87,6 +87,61 @@ export async function postComment(token: string, key: string, message: string): 
   }
 }
 
+export function figmaFileUrl(key: string): string {
+  return `https://www.figma.com/design/${key}`;
+}
+
+/**
+ * Per-file Google Chat ping with a link back to the file.
+ * Note: Chat webhooks don't send CORS headers, so we fire as `no-cors` and
+ * can't read the response. Treat as fire-and-forget.
+ */
+export async function pingGChat(
+  webhookUrl: string,
+  fileName: string,
+  fileKey: string,
+  counts: { names: number; structure: number; responsive: number },
+): Promise<void> {
+  const total = counts.names + counts.structure + counts.responsive;
+  const summary = `${counts.names} names · ${counts.structure} structure · ${counts.responsive} responsive`;
+  const body = {
+    cardsV2: [
+      {
+        cardId: `handover-${fileKey}`,
+        card: {
+          header: {
+            title: `🔍 Pre-handover: ${fileName}`,
+            subtitle: `${total} issue${total !== 1 ? 's' : ''} to fix before dev handover`,
+          },
+          sections: [
+            {
+              widgets: [
+                { decoratedText: { topLabel: 'Issues', text: summary } },
+                {
+                  buttonList: {
+                    buttons: [
+                      {
+                        text: 'Open in Figma',
+                        onClick: { openLink: { url: figmaFileUrl(fileKey) } },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  };
+  await fetch(webhookUrl, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
 // Quick token validation. PATs (figd_) use /v1/me; plan tokens (figp_) use
 // /v1/activity_logs (the smallest endpoint plan tokens accept).
 export async function verifyToken(

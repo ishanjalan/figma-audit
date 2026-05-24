@@ -38,7 +38,13 @@ function saveState(state: WatchState): void {
   writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
 }
 
-async function postComment(token: string, fileKey: string, message: string): Promise<void> {
+interface CommentResponse {
+  id: string;
+  message: string;
+  created_at: string;
+}
+
+async function postComment(token: string, fileKey: string, message: string): Promise<CommentResponse> {
   const res = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments`, {
     method: 'POST',
     headers: { 'X-Figma-Token': token, 'Content-Type': 'application/json' },
@@ -46,6 +52,67 @@ async function postComment(token: string, fileKey: string, message: string): Pro
   });
   if (!res.ok) {
     throw new Error(`Comment POST failed ${res.status}: ${await res.text()}`);
+  }
+  return (await res.json()) as CommentResponse;
+}
+
+function figmaFileUrl(key: string): string {
+  return `https://www.figma.com/design/${key}`;
+}
+
+/**
+ * Per-file Google Chat ping. Sent after we post the in-Figma comment so the
+ * design owner gets a reliable notification with a link back to the file —
+ * Figma's own notifications only reach file watchers.
+ */
+async function pingGChat(
+  webhookUrl: string,
+  fileName: string,
+  fileKey: string,
+  counts: { names: number; structure: number; responsive: number },
+): Promise<void> {
+  const total = counts.names + counts.structure + counts.responsive;
+  const summary =
+    `${counts.names} names · ${counts.structure} structure · ${counts.responsive} responsive`;
+
+  const body = {
+    cardsV2: [
+      {
+        cardId: `handover-${fileKey}`,
+        card: {
+          header: {
+            title: `🔍 Pre-handover: ${fileName}`,
+            subtitle: `${total} issue${total !== 1 ? 's' : ''} to fix before dev handover`,
+          },
+          sections: [
+            {
+              widgets: [
+                { decoratedText: { topLabel: 'Issues', text: summary } },
+                {
+                  buttonList: {
+                    buttons: [
+                      {
+                        text: 'Open in Figma',
+                        onClick: { openLink: { url: figmaFileUrl(fileKey) } },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  const res = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`GChat ping failed ${res.status}: ${await res.text()}`);
   }
 }
 
@@ -73,6 +140,7 @@ async function main() {
   const token = process.env.FIGMA_TOKEN;
   const raw = process.env.FIGMA_HANDOVER_PROJECT_IDS;
   const projectIds = raw?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
+  const gchatUrl = process.env.GCHAT_WEBHOOK_URL;
 
   if (!token) {
     console.error('FIGMA_TOKEN required');
@@ -81,6 +149,9 @@ async function main() {
   if (projectIds.length === 0) {
     console.error('FIGMA_HANDOVER_PROJECT_IDS required (comma-separated project IDs of your "Ready for Dev" projects)');
     process.exit(1);
+  }
+  if (!gchatUrl) {
+    console.log('Note: GCHAT_WEBHOOK_URL not set — in-file comments will post but no Chat notifications will be sent.');
   }
 
   const state = loadState();
@@ -127,7 +198,17 @@ async function main() {
         await postComment(token, f.key, formatComment(counts));
         state.lastCommented[f.key] = f.last_modified;
         commented++;
-        console.log(`commented (${total} issues)`);
+
+        if (gchatUrl) {
+          try {
+            await pingGChat(gchatUrl, file.name, f.key, counts);
+            console.log(`commented + chat ping (${total} issues)`);
+          } catch (err) {
+            console.log(`commented (${total} issues) · chat ping failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        } else {
+          console.log(`commented (${total} issues)`);
+        }
       } catch (err) {
         errored++;
         console.log(`error — ${err instanceof Error ? err.message : String(err)}`);
