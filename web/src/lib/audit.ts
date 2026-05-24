@@ -10,6 +10,7 @@ import type { FigmaNode } from '../../../src/api/types.ts';
 export interface StructureBreakdown {
   hidden: number;
   emptyContainer: number;
+  detachedInstance: number;
 }
 
 export interface AuditCounts {
@@ -37,6 +38,7 @@ export function auditDocument(doc: FigmaNode): AuditResult {
     structureBreakdown: {
       hidden: structureIssues.filter((i) => i.kind === 'hidden').length,
       emptyContainer: structureIssues.filter((i) => i.kind === 'empty-container').length,
+      detachedInstance: structureIssues.filter((i) => i.kind === 'detached-instance').length,
     },
     responsive: responsiveIssues.length,
     total: nameIssues.length + structureIssues.length + responsiveIssues.length,
@@ -57,6 +59,7 @@ export function formatComment(counts: AuditCounts): string {
     const parts: string[] = [];
     if (b.hidden > 0) parts.push(`${b.hidden} hidden`);
     if (b.emptyContainer > 0) parts.push(`${b.emptyContainer} empty container${b.emptyContainer !== 1 ? 's' : ''}`);
+    if (b.detachedInstance > 0) parts.push(`${b.detachedInstance} detached instance${b.detachedInstance !== 1 ? 's' : ''}`);
     lines.push(`• ${counts.structure} structural issue${counts.structure !== 1 ? 's' : ''} (${parts.join(', ')}) → fix in Handover plugin → Clean tab`);
   }
   if (counts.responsive > 0) {
