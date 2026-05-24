@@ -93,10 +93,9 @@ async function registerForTeam(teamId: string) {
     method: 'POST',
     body: JSON.stringify({
       event_type: 'FILE_UPDATE',
-      context: { type: 'TEAM', id: teamId },
+      team_id: teamId,
       endpoint,
       passcode,
-      description: 'figma-audit handover watch',
     }),
   });
   console.log(`  Team ${teamId}: webhook registered [${data.id}] → ${endpoint}`);
