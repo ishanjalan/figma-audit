@@ -16,7 +16,6 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { getProjectFiles, getFile } from './api/client.ts';
 import { checkNames } from './checks/names.ts';
 import { checkStructure } from './checks/structure.ts';
-import { checkResponsive } from './checks/responsive.ts';
 import { groupByFrame, buildPinComments } from './pin-comments.ts';
 
 const STATE_FILE = '.handover-watch-state.json';
@@ -103,10 +102,9 @@ async function pingGChat(
     names: number;
     structure: number;
     structureBreakdown?: { hidden: number; emptyContainer: number; detachedInstance: number };
-    responsive: number;
   },
 ): Promise<void> {
-  const total = counts.names + counts.structure + counts.responsive;
+  const total = counts.names + counts.structure;
   const b = counts.structureBreakdown;
   let structureDetail = `${counts.structure}`;
   if (b) {
@@ -119,7 +117,6 @@ async function pingGChat(
   const summary = [
     `📛 Names: ${counts.names} → Handover › Names tab`,
     `🧹 Structure: ${structureDetail} → Handover › Clean tab`,
-    `📐 Responsive: ${counts.responsive} → Handover › Fluid tab`,
   ].join('<br>');
 
   const body = {
@@ -167,9 +164,8 @@ function formatComment(counts: {
   names: number;
   structure: number;
   structureBreakdown?: { hidden: number; emptyContainer: number; detachedInstance: number };
-  responsive: number;
 }): string {
-  const total = counts.names + counts.structure + counts.responsive;
+  const total = counts.names + counts.structure;
   const lines = [
     `🔍 Pre-handover audit — ${total} issue${total !== 1 ? 's' : ''} found before dev handover:`,
     '',
@@ -187,9 +183,6 @@ function formatComment(counts: {
     }
     const detail = parts.length ? ` (${parts.join(', ')})` : '';
     lines.push(`• ${counts.structure} structural issue${counts.structure !== 1 ? 's' : ''}${detail} → fix in Handover plugin → Clean tab`);
-  }
-  if (counts.responsive > 0) {
-    lines.push(`• ${counts.responsive} frame${counts.responsive !== 1 ? 's' : ''} lacking horizontal responsiveness → fix in Handover plugin → Fluid tab`);
   }
   lines.push('');
   lines.push('💡 Open the file → Plugins menu → Handover. Set scope to "Page" (top-left toggle) and check every page — the audit covers the whole document. Each tab has a "Fix all" button.');
@@ -249,7 +242,6 @@ async function main() {
         const file = await getFile(token, f.key);
         const nameIssues = checkNames(file.document);
         const structureIssues = checkStructure(file.document);
-        const responsiveIssues = checkResponsive(file.document);
         const counts = {
           names: nameIssues.length,
           structure: structureIssues.length,
@@ -258,15 +250,13 @@ async function main() {
             emptyContainer: structureIssues.filter((i) => i.kind === 'empty-container').length,
             detachedInstance: structureIssues.filter((i) => i.kind === 'detached-instance').length,
           },
-          responsive: responsiveIssues.length,
         };
-        const total = counts.names + counts.structure + counts.responsive;
+        const total = counts.names + counts.structure;
 
         // ── Resolve stale pins on frames that are now clean ──────────────────
         const dirtyFrameIds = new Set([
           ...nameIssues.map((i) => i.topLevelFrameId),
           ...structureIssues.map((i) => i.topLevelFrameId),
-          ...responsiveIssues.map((i) => i.topLevelFrameId),
         ]);
         const previousPins = state.pinnedComments[f.key] ?? {};
         let pinsResolved = 0;
@@ -314,7 +304,7 @@ async function main() {
         // ── Post new pin comments for newly-dirty frames ─────────────────────
         // Skip frames that already have a tracked pin (avoid duplicates).
         const alreadyPinned = new Set(Object.keys(state.pinnedComments[f.key] ?? {}));
-        const summaries = groupByFrame(nameIssues, structureIssues, responsiveIssues, 10);
+        const summaries = groupByFrame(nameIssues, structureIssues, 10);
         const pins = buildPinComments(summaries.filter((s) => !alreadyPinned.has(s.topLevelFrameId)));
         let pinsPosted = 0;
         for (const pin of pins) {

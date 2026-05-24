@@ -140,7 +140,7 @@
 
           // 2. Per-screen pin comments — top 10 most-affected top-level frames.
           const pins = buildPinComments(
-            groupByFrame(result.nameIssues, result.structureIssues, result.responsiveIssues, 10),
+            groupByFrame(result.nameIssues, result.structureIssues, 10),
           );
           for (const pin of pins) {
             try {

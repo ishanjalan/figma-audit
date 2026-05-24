@@ -15,7 +15,7 @@ function coloured(n: number): string {
 }
 
 function totalIssues(r: AuditResult): number {
-  return r.names.length + r.structure.length + r.responsive.length;
+  return r.names.length + r.structure.length;
 }
 
 export function reportConsole(results: AuditResult[]): void {
@@ -39,7 +39,6 @@ export function reportConsole(results: AuditResult[]): void {
     if (total > 0) {
       console.log(`    ${CYN}names${R}      ${coloured(r.names.length)}`);
       console.log(`    ${CYN}structure${R}  ${coloured(r.structure.length)}`);
-      console.log(`    ${CYN}responsive${R} ${coloured(r.responsive.length)}`);
     }
     console.log();
   }

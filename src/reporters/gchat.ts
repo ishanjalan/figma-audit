@@ -3,7 +3,7 @@
 import type { AuditResult } from '../index.ts';
 
 function total(r: AuditResult): number {
-  return r.names.length + r.structure.length + r.responsive.length;
+  return r.names.length + r.structure.length;
 }
 
 function figmaUrl(key: string): string {
@@ -33,7 +33,7 @@ export async function reportGChat(results: AuditResult[], webhookUrl: string): P
             (r) =>
               `<a href="${figmaUrl(r.fileKey)}">${r.fileName}</a>` +
               ` — ${total(r)} issues` +
-              ` (${r.names.length} names · ${r.structure.length} structure · ${r.responsive.length} responsive)`,
+              ` (${r.names.length} names · ${r.structure.length} structure)`,
           )
           .join('\n');
 

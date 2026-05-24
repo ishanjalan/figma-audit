@@ -2,13 +2,11 @@ import { parseArgs } from 'node:util';
 import { getOrgTeams, getTeamProjects, getProjectFiles, getFile } from './api/client.ts';
 import { checkNames } from './checks/names.ts';
 import { checkStructure } from './checks/structure.ts';
-import { checkResponsive } from './checks/responsive.ts';
 import { reportConsole } from './reporters/console.ts';
 import { reportJson } from './reporters/json.ts';
 import { reportGChat } from './reporters/gchat.ts';
 import type { NameIssue } from './checks/names.ts';
 import type { StructureIssue } from './checks/structure.ts';
-import type { ResponsiveIssue } from './checks/responsive.ts';
 
 export interface AuditResult {
   fileKey: string;
@@ -16,7 +14,6 @@ export interface AuditResult {
   lastModified: string;
   names: NameIssue[];
   structure: StructureIssue[];
-  responsive: ResponsiveIssue[];
 }
 
 // ── Exclusion rules ───────────────────────────────────────────────────────────
@@ -165,18 +162,16 @@ async function main() {
     process.stdout.write(`  ${entry.name} … `);
     try {
       const file = await getFile(token, entry.key);
-      const names      = checkNames(file.document);
-      const structure  = checkStructure(file.document);
-      const responsive = checkResponsive(file.document);
+      const names     = checkNames(file.document);
+      const structure = checkStructure(file.document);
       results.push({
         fileKey: entry.key,
         fileName: file.name,
         lastModified: file.lastModified,
         names,
         structure,
-        responsive,
       });
-      const total = names.length + structure.length + responsive.length;
+      const total = names.length + structure.length;
       // If we had a placeholder name (from activity-log discovery), surface the real one.
       if (entry.name.startsWith('(') && entry.name.endsWith(')')) {
         process.stdout.write(`${file.name} · `);

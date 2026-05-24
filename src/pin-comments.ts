@@ -7,7 +7,6 @@
 
 import type { NameIssue } from './checks/names.ts';
 import type { StructureIssue, StructureIssueKind } from './checks/structure.ts';
-import type { ResponsiveIssue } from './checks/responsive.ts';
 
 export interface PerFrameSummary {
   topLevelFrameId: string;
@@ -16,7 +15,6 @@ export interface PerFrameSummary {
   names: number;
   structure: number;
   structureBreakdown: Record<StructureIssueKind, number>;
-  responsive: number;
 }
 
 export interface PinComment {
@@ -34,7 +32,6 @@ export interface PinComment {
 export function groupByFrame(
   names: NameIssue[],
   structure: StructureIssue[],
-  responsive: ResponsiveIssue[],
   limit = 10,
 ): PerFrameSummary[] {
   const map = new Map<string, PerFrameSummary>();
@@ -49,7 +46,6 @@ export function groupByFrame(
         names: 0,
         structure: 0,
         structureBreakdown: { hidden: 0, 'empty-container': 0, 'detached-instance': 0 },
-        responsive: 0,
       };
       map.set(id, entry);
     }
@@ -67,12 +63,6 @@ export function groupByFrame(
     e.structureBreakdown[i.kind]++;
     e.total++;
   }
-  for (const i of responsive) {
-    const e = ensure(i.topLevelFrameId, i.topLevelFrameName);
-    e.responsive++;
-    e.total++;
-  }
-
   return [...map.values()]
     .sort((a, b) => b.total - a.total)
     .slice(0, limit);
@@ -90,9 +80,6 @@ export function formatPinComment(s: PerFrameSummary): string {
     if (b['empty-container'] > 0) parts.push(`${b['empty-container']} empty`);
     if (b['detached-instance'] > 0) parts.push(`${b['detached-instance']} detached`);
     lines.push(`• ${s.structure} structural (${parts.join(', ')}) → Handover › Clean tab`);
-  }
-  if (s.responsive > 0) {
-    lines.push(`• ${s.responsive} non-responsive frame${s.responsive !== 1 ? 's' : ''} → Handover › Fluid tab`);
   }
   return lines.join('\n');
 }

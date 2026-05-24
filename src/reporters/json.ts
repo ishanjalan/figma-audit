@@ -9,7 +9,7 @@ export function reportJson(results: AuditResult[], outputPath?: string): void {
     generatedAt: new Date().toISOString(),
     fileCount: results.length,
     totalIssues: results.reduce(
-      (s, r) => s + r.names.length + r.structure.length + r.responsive.length,
+      (s, r) => s + r.names.length + r.structure.length,
       0,
     ),
     results,
