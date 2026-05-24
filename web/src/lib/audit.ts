@@ -7,7 +7,6 @@ import type { FigmaNode } from '../../../src/api/types.ts';
 export interface StructureBreakdown {
   hidden: number;
   emptyContainer: number;
-  deepNesting: number;
 }
 
 export interface AuditCounts {
@@ -24,7 +23,6 @@ export function auditDocument(doc: FigmaNode): AuditCounts {
   const structureBreakdown: StructureBreakdown = {
     hidden: structureIssues.filter((i) => i.kind === 'hidden').length,
     emptyContainer: structureIssues.filter((i) => i.kind === 'empty-container').length,
-    deepNesting: structureIssues.filter((i) => i.kind === 'deep-nesting').length,
   };
   const responsive = checkResponsive(doc).length;
   return {
@@ -49,7 +47,6 @@ export function formatComment(counts: AuditCounts): string {
     const parts: string[] = [];
     if (b.hidden > 0) parts.push(`${b.hidden} hidden`);
     if (b.emptyContainer > 0) parts.push(`${b.emptyContainer} empty container${b.emptyContainer !== 1 ? 's' : ''}`);
-    if (b.deepNesting > 0) parts.push(`${b.deepNesting} deeply-nested`);
     lines.push(`• ${counts.structure} structural issue${counts.structure !== 1 ? 's' : ''} (${parts.join(', ')}) → fix in Handover plugin → Clean tab`);
   }
   if (counts.responsive > 0) {

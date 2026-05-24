@@ -106,14 +106,14 @@ export async function pingGChat(
   counts: {
     names: number;
     structure: number;
-    structureBreakdown?: { hidden: number; emptyContainer: number; deepNesting: number };
+    structureBreakdown?: { hidden: number; emptyContainer: number };
     responsive: number;
   },
 ): Promise<void> {
   const total = counts.names + counts.structure + counts.responsive;
   const b = counts.structureBreakdown;
   const structureDetail = b
-    ? `${counts.structure} (${b.hidden} hidden · ${b.emptyContainer} empty · ${b.deepNesting} deep)`
+    ? `${counts.structure} (${b.hidden} hidden · ${b.emptyContainer} empty)`
     : `${counts.structure}`;
   const summaryLines = [
     `📛 Names: ${counts.names} → Handover › Names tab`,

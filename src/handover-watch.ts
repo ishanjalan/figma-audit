@@ -72,14 +72,14 @@ async function pingGChat(
   counts: {
     names: number;
     structure: number;
-    structureBreakdown?: { hidden: number; emptyContainer: number; deepNesting: number };
+    structureBreakdown?: { hidden: number; emptyContainer: number };
     responsive: number;
   },
 ): Promise<void> {
   const total = counts.names + counts.structure + counts.responsive;
   const b = counts.structureBreakdown;
   const structureDetail = b
-    ? `${counts.structure} (${b.hidden} hidden · ${b.emptyContainer} empty · ${b.deepNesting} deep)`
+    ? `${counts.structure} (${b.hidden} hidden · ${b.emptyContainer} empty)`
     : `${counts.structure}`;
   const summary = [
     `📛 Names: ${counts.names} → Handover › Names tab`,
@@ -131,7 +131,7 @@ async function pingGChat(
 function formatComment(counts: {
   names: number;
   structure: number;
-  structureBreakdown?: { hidden: number; emptyContainer: number; deepNesting: number };
+  structureBreakdown?: { hidden: number; emptyContainer: number };
   responsive: number;
 }): string {
   const total = counts.names + counts.structure + counts.responsive;
@@ -148,7 +148,6 @@ function formatComment(counts: {
     if (b) {
       if (b.hidden > 0) parts.push(`${b.hidden} hidden`);
       if (b.emptyContainer > 0) parts.push(`${b.emptyContainer} empty container${b.emptyContainer !== 1 ? 's' : ''}`);
-      if (b.deepNesting > 0) parts.push(`${b.deepNesting} deeply-nested`);
     }
     const detail = parts.length ? ` (${parts.join(', ')})` : '';
     lines.push(`• ${counts.structure} structural issue${counts.structure !== 1 ? 's' : ''}${detail} → fix in Handover plugin → Clean tab`);
@@ -213,7 +212,6 @@ async function main() {
           structureBreakdown: {
             hidden: structureIssues.filter((i) => i.kind === 'hidden').length,
             emptyContainer: structureIssues.filter((i) => i.kind === 'empty-container').length,
-            deepNesting: structureIssues.filter((i) => i.kind === 'deep-nesting').length,
           },
           responsive: checkResponsive(file.document).length,
         };
