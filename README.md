@@ -97,70 +97,11 @@ Go to **Settings → Secrets → Actions** and add:
 |------|----------|-------------|
 | `.github/workflows/audit.yml` | Mondays 09:00 UTC | Discovers teams, audits all files, posts GChat weekly summary |
 | `.github/workflows/handover-watch.yml` | Every hour at :15 | Checks handover projects for changes, posts in-Figma comments + per-screen pins |
-| `.github/workflows/handover-file.yml` | On `repository_dispatch` (webhook) | Audits a single file immediately when Figma fires a FILE_UPDATE event |
 | `.github/workflows/pages.yml` | On push to `main` | Builds and deploys the web UI to GitHub Pages |
 
 You can also trigger any workflow manually from the **Actions** tab.
 
----
-
-## Webhook setup (real-time, via Pipedream)
-
-The hourly cron is enough for most teams. If you want audits to fire the moment a designer saves a file, set up the Pipedream relay — it takes about 10 minutes and requires no deployment.
-
-### Step 1 — Create a Pipedream account
-Go to [pipedream.com](https://pipedream.com) and sign up. The free tier handles this comfortably.
-
-### Step 2 — Create a new workflow
-1. Click **New Workflow**
-2. Choose **HTTP / Webhook** as the trigger
-3. Select **HTTP API** → copy the endpoint URL (looks like `https://eo1abc123.m.pipedream.net`)
-4. Set **Response** to **Return a fixed response** → Status `200`, Body `OK`
-   *(Figma needs a quick 200 — the code step runs after the response is sent)*
-
-### Step 3 — Add the code step
-1. Click **+** to add a step → choose **Run Node.js code**
-2. Open `src/webhook/pipedream-workflow.js` in this repo and paste the entire contents
-
-### Step 4 — Set environment variables in Pipedream
-Go to your Pipedream project → **Settings → Environment Variables** and add:
-
-| Variable | Value |
-|----------|-------|
-| `FIGMA_WEBHOOK_PASSCODE` | Any strong random string — generate with `openssl rand -hex 32` |
-| `GITHUB_TOKEN` | A GitHub fine-grained PAT with **Actions: Read & Write** on this repo |
-| `GITHUB_REPO` | `yourorg/figma-audit` |
-
-### Step 5 — Save and deploy the workflow
-Click **Deploy** in Pipedream. The workflow is now live.
-
-### Step 6 — Add to your local `.env`
-```env
-FIGMA_HANDOVER_TEAM_IDS=18xxxx,19xxxx     # teams whose files you want to watch
-FIGMA_WEBHOOK_ENDPOINT=https://eo1abc123.m.pipedream.net
-FIGMA_WEBHOOK_PASSCODE=<same string from step 4>
-```
-
-### Step 7 — Register with Figma
-```bash
-npm run webhook:register
-```
-
-This calls the Figma API to point FILE_UPDATE events at your Pipedream URL. Run once per team ID. To verify it worked:
-```bash
-npm run webhook:list
-```
-
-### How it flows after setup
-```
-Designer saves Figma file
-  → Figma POST → Pipedream (validates passcode, ~instant)
-    → GitHub repository_dispatch { file_key }
-      → handover-file.yml runs for just that file
-        → in-Figma comment + GChat ping (within ~60s of save)
-```
-
-The hourly cron (`handover-watch.yml`) continues running as a safety net — it catches any files that slipped through (e.g. if Pipedream was down).
+> **Note:** Figma removed their webhooks API (HTTP 410). Real-time file-change notifications are not possible via the Figma API. The hourly cron is the only option.
 
 ---
 

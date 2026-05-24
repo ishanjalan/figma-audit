@@ -197,14 +197,12 @@ async function main() {
   const raw = process.env.FIGMA_HANDOVER_PROJECT_IDS;
   const projectIds = raw?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
   const gchatUrl = process.env.GCHAT_WEBHOOK_URL;
-  // When triggered by a webhook event, only audit this specific file.
-  const singleFileKey = process.env.FIGMA_FILE_KEY?.trim() || null;
 
   if (!token) {
     console.error('FIGMA_TOKEN required');
     process.exit(1);
   }
-  if (!singleFileKey && projectIds.length === 0) {
+  if (projectIds.length === 0) {
     console.error('FIGMA_HANDOVER_PROJECT_IDS required (comma-separated project IDs of your "Ready for Dev" projects)');
     process.exit(1);
   }
@@ -214,27 +212,6 @@ async function main() {
 
   const state = loadState();
   const counters = { commented: 0, skippedClean: 0, skippedUnchanged: 0, errored: 0 };
-
-  // ── Single-file mode (webhook-triggered) ─────────────────────────────────
-  // FIGMA_FILE_KEY is set by the handover-file.yml workflow when a Figma
-  // webhook fires. Skip the project loop and force-audit just that one file.
-  if (singleFileKey) {
-    console.log(`Webhook-triggered audit for file ${singleFileKey}…`);
-    // Force re-audit — webhook means the file definitely changed right now.
-    delete state.lastCommented[singleFileKey];
-    await auditOneFile(
-      token,
-      { key: singleFileKey, name: `(${singleFileKey})`, last_modified: '' },
-      state,
-      gchatUrl,
-      counters,
-    );
-    saveState(state);
-    console.log(`\nDone (webhook run). Commented: ${counters.commented} · errored: ${counters.errored}`);
-    return;
-  }
-
-  // ── Normal mode (hourly cron) ─────────────────────────────────────────────
   for (const projectId of projectIds) {
     console.log(`Scanning handover project ${projectId}…`);
     let files;
