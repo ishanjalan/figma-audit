@@ -100,10 +100,24 @@ export async function pingGChat(
   webhookUrl: string,
   fileName: string,
   fileKey: string,
-  counts: { names: number; structure: number; responsive: number },
+  counts: {
+    names: number;
+    structure: number;
+    structureBreakdown?: { hidden: number; emptyContainer: number; deepNesting: number };
+    responsive: number;
+  },
 ): Promise<void> {
   const total = counts.names + counts.structure + counts.responsive;
-  const summary = `${counts.names} names · ${counts.structure} structure · ${counts.responsive} responsive`;
+  const b = counts.structureBreakdown;
+  const structureDetail = b
+    ? `${counts.structure} (${b.hidden} hidden · ${b.emptyContainer} empty · ${b.deepNesting} deep)`
+    : `${counts.structure}`;
+  const summaryLines = [
+    `📛 Names: ${counts.names} → Handover › Names tab`,
+    `🧹 Structure: ${structureDetail} → Handover › Clean tab`,
+    `📐 Responsive: ${counts.responsive} → Handover › Fluid tab`,
+  ];
+  const summary = summaryLines.join('\n');
   const body = {
     cardsV2: [
       {
@@ -116,7 +130,7 @@ export async function pingGChat(
           sections: [
             {
               widgets: [
-                { decoratedText: { topLabel: 'Issues', text: summary } },
+                { textParagraph: { text: summary.replace(/\n/g, '<br>') } },
                 {
                   buttonList: {
                     buttons: [

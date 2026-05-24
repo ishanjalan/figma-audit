@@ -69,11 +69,23 @@ async function pingGChat(
   webhookUrl: string,
   fileName: string,
   fileKey: string,
-  counts: { names: number; structure: number; responsive: number },
+  counts: {
+    names: number;
+    structure: number;
+    structureBreakdown?: { hidden: number; emptyContainer: number; deepNesting: number };
+    responsive: number;
+  },
 ): Promise<void> {
   const total = counts.names + counts.structure + counts.responsive;
-  const summary =
-    `${counts.names} names · ${counts.structure} structure · ${counts.responsive} responsive`;
+  const b = counts.structureBreakdown;
+  const structureDetail = b
+    ? `${counts.structure} (${b.hidden} hidden · ${b.emptyContainer} empty · ${b.deepNesting} deep)`
+    : `${counts.structure}`;
+  const summary = [
+    `📛 Names: ${counts.names} → Handover › Names tab`,
+    `🧹 Structure: ${structureDetail} → Handover › Clean tab`,
+    `📐 Responsive: ${counts.responsive} → Handover › Fluid tab`,
+  ].join('<br>');
 
   const body = {
     cardsV2: [
@@ -87,7 +99,7 @@ async function pingGChat(
           sections: [
             {
               widgets: [
-                { decoratedText: { topLabel: 'Issues', text: summary } },
+                { textParagraph: { text: summary } },
                 {
                   buttonList: {
                     buttons: [
@@ -116,23 +128,36 @@ async function pingGChat(
   }
 }
 
-function formatComment(counts: { names: number; structure: number; responsive: number }): string {
+function formatComment(counts: {
+  names: number;
+  structure: number;
+  structureBreakdown?: { hidden: number; emptyContainer: number; deepNesting: number };
+  responsive: number;
+}): string {
   const total = counts.names + counts.structure + counts.responsive;
   const lines = [
     `🔍 Pre-handover audit — ${total} issue${total !== 1 ? 's' : ''} found before dev handover:`,
     '',
   ];
   if (counts.names > 0) {
-    lines.push(`• ${counts.names} layer${counts.names !== 1 ? 's' : ''} with auto-generated names (e.g. "Frame 23")`);
+    lines.push(`• ${counts.names} layer${counts.names !== 1 ? 's' : ''} with auto-generated names → fix in Handover plugin → Names tab`);
   }
   if (counts.structure > 0) {
-    lines.push(`• ${counts.structure} structural issue${counts.structure !== 1 ? 's' : ''} (hidden layers, empty containers, deep nesting)`);
+    const b = counts.structureBreakdown;
+    const parts: string[] = [];
+    if (b) {
+      if (b.hidden > 0) parts.push(`${b.hidden} hidden`);
+      if (b.emptyContainer > 0) parts.push(`${b.emptyContainer} empty container${b.emptyContainer !== 1 ? 's' : ''}`);
+      if (b.deepNesting > 0) parts.push(`${b.deepNesting} deeply-nested`);
+    }
+    const detail = parts.length ? ` (${parts.join(', ')})` : '';
+    lines.push(`• ${counts.structure} structural issue${counts.structure !== 1 ? 's' : ''}${detail} → fix in Handover plugin → Clean tab`);
   }
   if (counts.responsive > 0) {
-    lines.push(`• ${counts.responsive} frame${counts.responsive !== 1 ? 's' : ''} lacking horizontal responsiveness`);
+    lines.push(`• ${counts.responsive} frame${counts.responsive !== 1 ? 's' : ''} lacking horizontal responsiveness → fix in Handover plugin → Fluid tab`);
   }
   lines.push('');
-  lines.push('💡 Run the Handover plugin (Plugins → Handover) to fix most of these in one click.');
+  lines.push('💡 Open the file → Plugins menu → Handover. Each tab has a "Fix all" button.');
   return lines.join('\n');
 }
 
@@ -181,9 +206,15 @@ async function main() {
       process.stdout.write(`  ${f.name} … `);
       try {
         const file = await getFile(token, f.key);
+        const structureIssues = checkStructure(file.document);
         const counts = {
           names: checkNames(file.document).length,
-          structure: checkStructure(file.document).length,
+          structure: structureIssues.length,
+          structureBreakdown: {
+            hidden: structureIssues.filter((i) => i.kind === 'hidden').length,
+            emptyContainer: structureIssues.filter((i) => i.kind === 'empty-container').length,
+            deepNesting: structureIssues.filter((i) => i.kind === 'deep-nesting').length,
+          },
           responsive: checkResponsive(file.document).length,
         };
         const total = counts.names + counts.structure + counts.responsive;
