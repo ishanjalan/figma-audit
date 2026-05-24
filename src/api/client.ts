@@ -54,6 +54,31 @@ export async function getProjectFiles(token: string, projectId: string): Promise
   return ProjectFilesSchema.parse(raw).files;
 }
 
+// ── File versions ─────────────────────────────────────────────────────────────
+
+export interface FileEditor {
+  handle: string;   // display name, e.g. "Ishan Jalan"
+  imgUrl: string;
+}
+
+/**
+ * Returns the display name of the person who most recently saved the file.
+ * Uses GET /v1/files/:key/versions — returns null if the call fails or the
+ * version list is empty (plan tokens may not have version access).
+ */
+export async function getLastEditor(token: string, key: string): Promise<FileEditor | null> {
+  try {
+    const raw = await apiFetch(`${BASE}/files/${key}/versions`, token) as {
+      versions?: Array<{ user?: { handle?: string; img_url?: string } }>;
+    };
+    const user = raw?.versions?.[0]?.user;
+    if (!user?.handle) return null;
+    return { handle: user.handle, imgUrl: user.img_url ?? '' };
+  } catch {
+    return null; // non-fatal — GChat ping continues without editor info
+  }
+}
+
 // ── File content ──────────────────────────────────────────────────────────────
 
 export interface FileContent {

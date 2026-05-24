@@ -8,7 +8,10 @@
     "discover": "node --env-file=.env --import tsx/esm src/discover.ts",
     "handover-watch": "node --env-file=.env --import tsx/esm src/handover-watch.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "webhook:register": "node --env-file=.env --import tsx/esm src/webhook/register.ts --action register",
+    "webhook:list":     "node --env-file=.env --import tsx/esm src/webhook/register.ts --action list",
+    "webhook:delete":   "node --env-file=.env --import tsx/esm src/webhook/register.ts --action delete"
   },
   "dependencies": {
     "zod": "^3.23.0"
