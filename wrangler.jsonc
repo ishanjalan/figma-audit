@@ -1,0 +1,5 @@
+{
+  "name": "figma-audit-relay",
+  "compatibility_date": "2026-05-24",
+  "main": "src/webhook/receiver.ts"
+}

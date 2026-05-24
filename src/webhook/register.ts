@@ -9,8 +9,8 @@
  * Required env vars (add to .env):
  *   FIGMA_TOKEN                 — plan access token (figp_…)
  *   FIGMA_HANDOVER_TEAM_IDS     — comma-separated team IDs to watch
- *   FIGMA_WEBHOOK_ENDPOINT      — public URL of your Cloudflare Worker
- *   FIGMA_WEBHOOK_PASSCODE      — same random string you set as a Worker secret
+ *   FIGMA_WEBHOOK_ENDPOINT      — your Pipedream HTTP trigger URL
+ *   FIGMA_WEBHOOK_PASSCODE      — same random string you set in Pipedream's env
  */
 
 import { parseArgs } from 'node:util';
