@@ -5,7 +5,9 @@
 
   // ── State ─────────────────────────────────────────────────────────────────
   let token = $state('');
+  let scope = $state<'project' | 'file'>('project');
   let projectId = $state('');
+  let fileInput = $state(''); // accepts URL or raw key
   let gchatWebhook = $state('');
   let tokenStatus = $state<'unknown' | 'verifying' | 'valid' | 'invalid'>('unknown');
   let tokenKind = $state<'pat' | 'plan'>('pat');
@@ -34,9 +36,25 @@
     }
     const lastProject = localStorage.getItem('figma-last-project');
     if (lastProject) projectId = lastProject;
+    const lastFile = localStorage.getItem('figma-last-file');
+    if (lastFile) fileInput = lastFile;
+    const lastScope = localStorage.getItem('figma-last-scope');
+    if (lastScope === 'file' || lastScope === 'project') scope = lastScope;
     const savedWebhook = localStorage.getItem('gchat-webhook');
     if (savedWebhook) gchatWebhook = savedWebhook;
   });
+
+  // Extract a file key from a Figma URL or return the raw input.
+  // Accepts: figma.com/file/KEY/..., figma.com/design/KEY/..., or just KEY.
+  function parseFileKey(input: string): string | null {
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+    const match = trimmed.match(/figma\.com\/(?:file|design|proto)\/([A-Za-z0-9]+)/);
+    if (match) return match[1];
+    // Raw key — Figma keys are alphanumeric, typically 22 chars.
+    if (/^[A-Za-z0-9]+$/.test(trimmed)) return trimmed;
+    return null;
+  }
 
   async function verify() {
     if (!token.trim()) return;
@@ -62,10 +80,9 @@
 
   // ── Run scan ──────────────────────────────────────────────────────────────
   async function run() {
-    const id = projectId.trim();
-    if (!id || tokenStatus !== 'valid') return;
+    if (tokenStatus !== 'valid') return;
 
-    localStorage.setItem('figma-last-project', id);
+    localStorage.setItem('figma-last-scope', scope);
     if (gchatWebhook.trim()) localStorage.setItem('gchat-webhook', gchatWebhook.trim());
     else localStorage.removeItem('gchat-webhook');
 
@@ -74,14 +91,32 @@
     log = [];
 
     let files: ProjectFile[];
-    try {
-      log = [...log, `Loading project ${id}…`];
-      files = await getProjectFiles(token.trim(), id);
-      log = [...log, `Found ${files.length} file${files.length !== 1 ? 's' : ''}.`];
-    } catch (err) {
-      log = [...log, `❌ Failed to load project: ${err instanceof Error ? err.message : String(err)}`];
-      phase = 'done';
-      return;
+
+    if (scope === 'project') {
+      const id = projectId.trim();
+      if (!id) { phase = 'setup'; return; }
+      localStorage.setItem('figma-last-project', id);
+
+      try {
+        log = [...log, `Loading project ${id}…`];
+        files = await getProjectFiles(token.trim(), id);
+        log = [...log, `Found ${files.length} file${files.length !== 1 ? 's' : ''}.`];
+      } catch (err) {
+        log = [...log, `❌ Failed to load project: ${err instanceof Error ? err.message : String(err)}`];
+        phase = 'done';
+        return;
+      }
+    } else {
+      const key = parseFileKey(fileInput);
+      if (!key) {
+        log = [...log, '❌ Couldn\'t parse a file key from the input. Paste a Figma file URL or its key.'];
+        phase = 'done';
+        return;
+      }
+      localStorage.setItem('figma-last-file', fileInput.trim());
+      log = [...log, `Auditing single file ${key}…`];
+      // Placeholder — name resolves from the getFile response in the loop below.
+      files = [{ key, name: `(${key})`, last_modified: new Date().toISOString() }];
     }
 
     rows = files.map((f) => ({ key: f.key, name: f.name, status: 'queued' }));
@@ -198,18 +233,49 @@
     </section>
 
     <section class="card">
-      <label for="project">Project ID</label>
-      <input
-        id="project"
-        type="text"
-        bind:value={projectId}
-        placeholder="e.g. 12345678"
-        disabled={tokenStatus !== 'valid'}
-      />
-      <p class="hint">
-        Open the project in Figma. The ID is in the URL:
-        <code>figma.com/files/project/<strong>12345678</strong>/...</code>
-      </p>
+      <div class="scope-tabs">
+        <button
+          type="button"
+          class="tab"
+          class:active={scope === 'project'}
+          onclick={() => (scope = 'project')}
+          disabled={tokenStatus !== 'valid'}
+        >Whole project</button>
+        <button
+          type="button"
+          class="tab"
+          class:active={scope === 'file'}
+          onclick={() => (scope = 'file')}
+          disabled={tokenStatus !== 'valid'}
+        >Single file</button>
+      </div>
+
+      {#if scope === 'project'}
+        <label for="project">Project ID</label>
+        <input
+          id="project"
+          type="text"
+          bind:value={projectId}
+          placeholder="e.g. 12345678"
+          disabled={tokenStatus !== 'valid'}
+        />
+        <p class="hint">
+          Open the project in Figma. The ID is in the URL:
+          <code>figma.com/files/project/<strong>12345678</strong>/...</code>
+        </p>
+      {:else}
+        <label for="file">Figma file URL or key</label>
+        <input
+          id="file"
+          type="text"
+          bind:value={fileInput}
+          placeholder="https://www.figma.com/design/ABC123/... or just ABC123"
+          disabled={tokenStatus !== 'valid'}
+        />
+        <p class="hint">
+          Paste the full Figma URL or just the file key. Audits one file only.
+        </p>
+      {/if}
 
       <label class="checkbox">
         <input type="checkbox" bind:checked={postComments} disabled={tokenStatus !== 'valid'} />
@@ -233,7 +299,10 @@
       </p>
     </section>
 
-    <button onclick={run} disabled={tokenStatus !== 'valid' || !projectId.trim()}>
+    <button
+      onclick={run}
+      disabled={tokenStatus !== 'valid' || (scope === 'project' ? !projectId.trim() : !fileInput.trim())}
+    >
       {postComments ? 'Scan & comment' : 'Scan (dry run)'}
     </button>
   {/if}
@@ -339,6 +408,34 @@
     cursor: pointer;
   }
   .checkbox input { margin: 0; }
+
+  .scope-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    padding: 4px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    width: fit-content;
+  }
+  .tab {
+    background: transparent;
+    color: var(--text-muted);
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+  }
+  .tab:hover:not(:disabled):not(.active) {
+    background: rgba(0, 0, 0, 0.04);
+    color: var(--text);
+  }
+  .tab.active {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+  .tab:disabled { opacity: 0.5; }
 
   .token-valid {
     display: flex;
