@@ -32,6 +32,7 @@ jobs:
         run: |
           {
             echo "FIGMA_TOKEN=${{ secrets.FIGMA_TOKEN }}"
+            echo "FIGMA_COMMENT_TOKEN=${{ secrets.FIGMA_COMMENT_TOKEN }}"
             echo "FIGMA_HANDOVER_PROJECT_IDS=${{ secrets.FIGMA_HANDOVER_PROJECT_IDS }}"
             echo "GCHAT_WEBHOOK_URL=${{ secrets.GCHAT_WEBHOOK_URL }}"
           } > .env

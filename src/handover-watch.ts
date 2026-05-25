@@ -194,6 +194,10 @@ function formatComment(counts: {
 
 async function main() {
   const token = process.env.FIGMA_TOKEN;
+  // Plan tokens (figp_) can read files/projects but cannot post comments.
+  // A personal access token (figd_) is required for comment write operations.
+  // Falls back to the plan token so local testing still works if both are the same.
+  const commentToken = process.env.FIGMA_COMMENT_TOKEN || token;
   const raw = process.env.FIGMA_HANDOVER_PROJECT_IDS;
   const projectIds = raw?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
   const gchatUrl = process.env.GCHAT_WEBHOOK_URL;
@@ -225,6 +229,7 @@ async function main() {
       state,
       gchatUrl,
       counters,
+      commentToken,
     );
     saveState(state);
     console.log(`\nDone (webhook run). Commented: ${counters.commented} · errored: ${counters.errored}`);
@@ -250,7 +255,7 @@ async function main() {
         counters.skippedUnchanged++;
         continue;
       }
-      await auditOneFile(token, f, state, gchatUrl, counters);
+      await auditOneFile(token, f, state, gchatUrl, counters, commentToken);
     }
   }
 
@@ -270,6 +275,7 @@ async function auditOneFile(
   state: WatchState,
   gchatUrl: string | undefined,
   counters: Counters,
+  commentToken: string = token,
 ): Promise<void> {
   process.stdout.write(`  ${f.name} … `);
   try {
@@ -301,7 +307,7 @@ async function auditOneFile(
     for (const [frameId, commentId] of Object.entries(previousPins)) {
       if (!dirtyFrameIds.has(frameId)) {
         try {
-          await deleteComment(token, f.key, commentId);
+          await deleteComment(commentToken, f.key, commentId);
           pinsResolved++;
         } catch (err) {
           console.log(`    resolve pin ${commentId} failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -316,7 +322,7 @@ async function auditOneFile(
     if (total === 0) {
       const prevSummary = state.summaryComments[f.key];
       if (prevSummary) {
-        try { await deleteComment(token, f.key, prevSummary); delete state.summaryComments[f.key]; } catch { /* ignore */ }
+        try { await deleteComment(commentToken, f.key, prevSummary); delete state.summaryComments[f.key]; } catch { /* ignore */ }
       }
       state.lastCommented[f.key] = file.lastModified;
       counters.skippedClean++;
@@ -328,9 +334,9 @@ async function auditOneFile(
     // ── Replace summary comment ────────────────────────────────────────────
     const prevSummaryId = state.summaryComments[f.key];
     if (prevSummaryId) {
-      try { await deleteComment(token, f.key, prevSummaryId); } catch { /* ignore */ }
+      try { await deleteComment(commentToken, f.key, prevSummaryId); } catch { /* ignore */ }
     }
-    const summaryComment = await postComment(token, f.key, formatComment(counts));
+    const summaryComment = await postComment(commentToken, f.key, formatComment(counts));
     state.summaryComments[f.key] = summaryComment.id;
 
     // ── Post pins for newly-dirty frames ───────────────────────────────────
@@ -340,7 +346,7 @@ async function auditOneFile(
     let pinsPosted = 0;
     for (const pin of pins) {
       try {
-        const pinComment = await postComment(token, f.key, pin.message, pin.clientMeta);
+        const pinComment = await postComment(commentToken, f.key, pin.message, pin.clientMeta);
         state.pinnedComments[f.key] ??= {};
         state.pinnedComments[f.key][pin.topLevelFrameId] = pinComment.id;
         pinsPosted++;
