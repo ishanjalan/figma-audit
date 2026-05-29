@@ -1,0 +1,3 @@
+[submodule "packages/handover-rules"]
+	path = packages/handover-rules
+	url = /Users/ishan.jalan/Documents/Cursor/handover-rules

@@ -7,11 +7,12 @@ describe('checkStructure', () => {
   const ids = () => issues.map((i) => i.nodeId);
   const byKind = (kind: string) => issues.filter((i) => i.kind === kind);
 
-  // ── hidden ──────────────────────────────────────────────────────────────────
+  // ── hidden-layer ─────────────────────────────────────────────────────────────
+  // D3: shared vocabulary uses 'hidden-layer' (aligned with the Handover plugin).
 
   it('flags a hidden frame', () => {
     expect(ids()).toContain('h1');
-    expect(byKind('hidden').find((i) => i.nodeId === 'h1')?.kind).toBe('hidden');
+    expect(byKind('hidden-layer').find((i) => i.nodeId === 'h1')?.kind).toBe('hidden-layer');
   });
 
   it('does NOT flag a hidden frame bound to a component bool prop', () => {
@@ -33,13 +34,9 @@ describe('checkStructure', () => {
     expect(ids()).not.toContain('e2');
   });
 
-  it('flags an empty FRAME whose only fill has visible:false', () => {
-    // fill is explicitly off → still counts as no fill
-    expect(ids()).toContain('e3');
-  });
-
   it('flags an empty GROUP', () => {
     expect(ids()).toContain('e4');
+    expect(byKind('empty-container').find((i) => i.nodeId === 'e4')?.kind).toBe('empty-container');
   });
 
   it('flags an empty FRAME inside a SECTION passthrough', () => {
@@ -54,6 +51,15 @@ describe('checkStructure', () => {
     const issue = issues.find((i) => i.nodeId === 'sec-child');
     expect(issue?.topLevelFrameId).toBe('sec-child');
     expect(issue?.topLevelFrameName).toBe('Empty inside section');
+  });
+
+  // ── transparent-fill ─────────────────────────────────────────────────────────
+  // A FRAME with fills but all fills invisible is 'transparent-fill', not
+  // 'empty-container' — the shared scanner distinguishes these correctly.
+
+  it('flags a FRAME with only invisible fills as transparent-fill', () => {
+    expect(ids()).toContain('e3');
+    expect(byKind('transparent-fill').find((i) => i.nodeId === 'e3')?.kind).toBe('transparent-fill');
   });
 
   // ── detached-instance ───────────────────────────────────────────────────────
@@ -96,8 +102,8 @@ describe('checkStructure', () => {
   });
 
   it('total issue count matches expected', () => {
-    // h1 (hidden), e1 (empty), e3 (empty/invisible-fill), e4 (empty group),
-    // di1 (detached), sec-child (empty inside section) = 6
+    // h1 (hidden-layer), e1 (empty-container), e3 (transparent-fill),
+    // e4 (empty-container), di1 (detached-instance), sec-child (empty-container) = 6
     expect(issues.length).toBe(6);
   });
 });

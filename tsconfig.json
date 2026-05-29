@@ -7,7 +7,10 @@
     "strict": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@rules/*": ["./packages/handover-rules/src/*"]
+    }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "packages/handover-rules/src/**/*.ts"]
 }

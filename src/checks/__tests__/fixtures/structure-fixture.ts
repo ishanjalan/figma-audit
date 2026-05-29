@@ -1,16 +1,22 @@
 /**
  * Minimal Figma document tree for testing checkStructure.
  *
+ * All nodes that test empty-container / transparent-fill behaviour have a
+ * non-zero absoluteBoundingBox so the shared scanner's zero-size check fires
+ * only when explicitly tested, not as a side-effect of missing geometry.
+ *
  * Scenarios covered:
- *  hidden:
- *    - visible: false node → SHOULD flag
+ *  hidden-layer (D3: was 'hidden' in the pre-Phase-2 audit):
+ *    - visible: false node → SHOULD flag as 'hidden-layer'
  *    - visible: false bound to componentPropertyReferences.visible → SHOULD NOT flag
  *    - hidden node inside hidden parent → parent flagged, child NOT separately flagged
  *  empty-container:
  *    - FRAME with no children, no fills → SHOULD flag
  *    - FRAME with no children but has visible fill → SHOULD NOT flag (visual leaf)
  *    - GROUP with no children → SHOULD flag
- *    - COMPONENT with no children → SHOULD flag
+ *  transparent-fill:
+ *    - FRAME with no children but fill visible:false → SHOULD flag as 'transparent-fill'
+ *      (the shared scanner catches the invisible fill before the empty-container check)
  *  detached-instance:
  *    - INSTANCE with no componentId → SHOULD flag
  *    - INSTANCE with componentId present → SHOULD NOT flag
@@ -23,6 +29,8 @@
 
 import type { FigmaNode } from '../../../api/types.ts';
 
+const bb = (w = 100, h = 100) => ({ absoluteBoundingBox: { x: 0, y: 0, width: w, height: h } });
+
 export const structureFixture: FigmaNode = {
   id: 'doc',
   name: 'Document',
@@ -33,15 +41,16 @@ export const structureFixture: FigmaNode = {
       name: 'Page 1',
       type: 'CANVAS',
       children: [
-        // ✅ hidden: visible false → should flag
+        // ✅ hidden-layer: visible false → should flag
         {
           id: 'h1',
           name: 'Hidden Layer',
           type: 'FRAME',
           visible: false,
+          ...bb(),
           children: [
             // child of hidden — should NOT be separately flagged
-            { id: 'h1-child', name: 'Child of hidden', type: 'FRAME', children: [] },
+            { id: 'h1-child', name: 'Child of hidden', type: 'FRAME', ...bb(), children: [] },
           ],
         },
 
@@ -53,6 +62,7 @@ export const structureFixture: FigmaNode = {
           componentId: 'spinner-master',
           visible: false,
           componentPropertyReferences: { visible: 'loading#BOOLEAN' },
+          ...bb(),
           children: [],
         },
 
@@ -61,6 +71,7 @@ export const structureFixture: FigmaNode = {
           id: 'e1',
           name: 'Empty Frame',
           type: 'FRAME',
+          ...bb(),
           children: [],
         },
 
@@ -70,16 +81,19 @@ export const structureFixture: FigmaNode = {
           name: 'Background Block',
           type: 'FRAME',
           fills: [{ type: 'SOLID', visible: true }],
+          ...bb(),
           children: [],
         },
 
-        // ❌ empty-container: frame with invisible fill — fill is off, so still empty visual
-        // → should flag (visible:false fill counts as no fill)
+        // ✅ transparent-fill: frame with fill explicitly set to visible:false.
+        // The shared scanner fires 'transparent-fill' (not 'empty-container') because
+        // the fill IS present but invisible — a different issue class than truly empty.
         {
           id: 'e3',
           name: 'Invisible Fill Frame',
           type: 'FRAME',
           fills: [{ type: 'SOLID', visible: false }],
+          ...bb(),
           children: [],
         },
 
@@ -88,6 +102,7 @@ export const structureFixture: FigmaNode = {
           id: 'e4',
           name: 'Empty Group',
           type: 'GROUP',
+          ...bb(),
           children: [],
         },
 
@@ -97,6 +112,7 @@ export const structureFixture: FigmaNode = {
           name: 'Broken Component',
           type: 'INSTANCE',
           // componentId intentionally absent
+          ...bb(),
           children: [],
         },
 
@@ -106,9 +122,10 @@ export const structureFixture: FigmaNode = {
           name: 'Valid Instance',
           type: 'INSTANCE',
           componentId: 'master-xyz',
+          ...bb(),
           children: [
             // internals should not be walked
-            { id: 'di2-child', name: 'Empty Frame', type: 'FRAME', children: [] },
+            { id: 'di2-child', name: 'Empty Frame', type: 'FRAME', ...bb(), children: [] },
           ],
         },
 
@@ -118,6 +135,7 @@ export const structureFixture: FigmaNode = {
           name: 'Locked Empty',
           type: 'FRAME',
           locked: true,
+          ...bb(),
           children: [],
         },
 
@@ -127,6 +145,7 @@ export const structureFixture: FigmaNode = {
           name: 'Interactive Frame',
           type: 'FRAME',
           reactions: [{ trigger: { type: 'ON_CLICK' } }],
+          ...bb(),
           children: [],
         },
 
@@ -137,7 +156,7 @@ export const structureFixture: FigmaNode = {
           type: 'SECTION',
           children: [
             // ✅ empty frame inside section → should flag
-            { id: 'sec-child', name: 'Empty inside section', type: 'FRAME', children: [] },
+            { id: 'sec-child', name: 'Empty inside section', type: 'FRAME', ...bb(), children: [] },
           ],
         },
 
@@ -147,7 +166,7 @@ export const structureFixture: FigmaNode = {
           name: 'Icon Shape',
           type: 'BOOLEAN_OPERATION',
           children: [
-            { id: 'bo-child', name: 'Some Vector', type: 'VECTOR', children: [] },
+            { id: 'bo-child', name: 'Some Vector', type: 'VECTOR', ...bb(), children: [] },
           ],
         },
       ],

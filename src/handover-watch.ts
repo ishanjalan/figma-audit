@@ -289,7 +289,7 @@ async function auditOneFile(
       names: nameIssues.length,
       structure: structureIssues.length,
       structureBreakdown: {
-        hidden: structureIssues.filter((i) => i.kind === 'hidden').length,
+        hidden: structureIssues.filter((i) => i.kind === 'hidden-layer').length,
         emptyContainer: structureIssues.filter((i) => i.kind === 'empty-container').length,
         detachedInstance: structureIssues.filter((i) => i.kind === 'detached-instance').length,
       },

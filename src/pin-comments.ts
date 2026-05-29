@@ -46,7 +46,13 @@ export function groupByFrame(
         names: 0,
         structure: 0,
         structureBreakdown: {
-          hidden: 0,
+          // D3: aligned with shared IssueType vocabulary ('hidden-layer' not 'hidden').
+          'hidden-layer': 0,
+          'transparent-fill': 0,
+          'zero-size': 0,
+          'out-of-bounds': 0,
+          'empty-text': 0,
+          'empty-vector': 0,
           'empty-container': 0,
           'detached-instance': 0,
           'single-child-group': 0,
@@ -58,7 +64,8 @@ export function groupByFrame(
       };
       map.set(id, entry);
     }
-    return entry;
+    // map.get is guaranteed non-null after the set above.
+    return entry!;
   };
 
   for (const i of names) {
@@ -85,7 +92,7 @@ export function formatPinComment(s: PerFrameSummary): string {
   if (s.structure > 0) {
     const b = s.structureBreakdown;
     const parts: string[] = [];
-    if (b.hidden > 0) parts.push(`${b.hidden} hidden`);
+    if (b['hidden-layer'] > 0) parts.push(`${b['hidden-layer']} hidden`);
     if (b['empty-container'] > 0) parts.push(`${b['empty-container']} empty`);
     if (b['detached-instance'] > 0) parts.push(`${b['detached-instance']} detached`);
     const nesting =

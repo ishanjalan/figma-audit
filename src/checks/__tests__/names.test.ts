@@ -7,11 +7,13 @@ describe('checkNames', () => {
   const ids = () => issues.map((i) => i.nodeId);
   const byReason = (r: string) => issues.filter((i) => i.reason === r);
 
-  // ── generic-name ─────────────────────────────────────────────────────────────
+  // ── default (formerly 'generic-name') ───────────────────────────────────────
+  // D3: shared vocabulary uses 'default' for Figma auto-generated names.
+  // The old audit used 'generic-name'; callers should now use 'default'.
 
   it('flags auto-layout frame with generic name', () => {
     expect(ids()).toContain('f1');
-    expect(byReason('generic-name').map((i) => i.nodeId)).toContain('f1');
+    expect(byReason('default').map((i) => i.nodeId)).toContain('f1');
   });
 
   it('flags top-level frame with generic name (no layout needed at top level)', () => {
@@ -22,20 +24,26 @@ describe('checkNames', () => {
     expect(ids()).toContain('f3');
   });
 
-  it('flags LINE with generic name', () => {
-    expect(ids()).toContain('f8');
+  // LINE / VECTOR are decorative nodes (isDecorativeNode = true in handover-rules).
+  // The shared package intentionally skips them — they have no meaningful rename.
+  it('does NOT flag LINE with generic name (decorative node)', () => {
+    expect(ids()).not.toContain('f8');
   });
 
-  it('flags VECTOR with generic name', () => {
-    expect(ids()).toContain('f9');
+  it('does NOT flag VECTOR with generic name (decorative node)', () => {
+    expect(ids()).not.toContain('f9');
   });
 
   it('does NOT flag a FRAME with a PascalCase name', () => {
     expect(ids()).not.toContain('f4');
   });
 
-  it('does NOT flag Rectangle with generic name (no text/layout — plugin cannot rename)', () => {
-    expect(ids()).not.toContain('f5');
+  // D1: detection is authoritative. 'Rectangle 1' matches GENERIC_NAME_RE so the
+  // shared detector flags it — even though the audit (like the plugin) cannot infer
+  // a rename for a bare rectangle. The issue is surfaced with no proposal.
+  it('flags Rectangle with generic name (D1: detection is authoritative)', () => {
+    expect(ids()).toContain('f5');
+    expect(byReason('default').map((i) => i.nodeId)).toContain('f5');
   });
 
   it('does NOT flag locked node', () => {
@@ -71,9 +79,9 @@ describe('checkNames', () => {
 
   // ── reason field ─────────────────────────────────────────────────────────────
 
-  it('sets reason: generic-name for auto-generated names', () => {
+  it('sets reason: default for auto-generated names', () => {
     const issue = issues.find((i) => i.nodeId === 'f1');
-    expect(issue?.reason).toBe('generic-name');
+    expect(issue?.reason).toBe('default');
   });
 
   it('sets reason: non-standard-case for PascalCase violations', () => {
@@ -91,9 +99,9 @@ describe('checkNames', () => {
   });
 
   it('total flagged count matches expected', () => {
-    // generic-name: f1, f2, f3, f8, f9 = 5
+    // default: f1, f2, f3, f5 = 4
     // non-standard-case: f10 = 1
-    // total = 6
-    expect(issues.length).toBe(6);
+    // total = 5
+    expect(issues.length).toBe(5);
   });
 });
