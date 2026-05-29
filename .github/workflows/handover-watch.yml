@@ -19,10 +19,11 @@ jobs:
         with:
           # Fetch with a token that can push (GITHUB_TOKEN has contents:write above).
           token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: recursive
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
