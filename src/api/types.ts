@@ -19,8 +19,22 @@ export interface FigmaNode {
   layoutMode?: string;  // 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID' | future values
   layoutSizingHorizontal?: string;
   layoutSizingVertical?: string;
+  layoutPositioning?: string;  // 'AUTO' | 'ABSOLUTE'
   constraints?: { horizontal: string; vertical: string };
   absoluteBoundingBox?: { x: number; y: number; width: number; height: number } | null;
+
+  // Visual identity — used to detect chrome-less passthrough/wrapper/redundant frames.
+  blendMode?: string;
+  clipsContent?: boolean;
+  paddingTop?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  paddingRight?: number;
+  rotation?: number;
+  cornerRadius?: number;
+
+  // Group / mask status.
+  isMask?: boolean;
 
   // Skip-signals — when present, the node is intentional and must not be flagged.
   // Mirrors the Handover plugin's scanner guards so audit & plugin stay aligned.
@@ -62,12 +76,22 @@ export const FigmaNodeSchema: z.ZodType<FigmaNode> = z.lazy(() =>
     layoutMode: z.string().optional(),  // permissive; Figma keeps adding values (GRID etc.)
     layoutSizingHorizontal: z.string().optional(),
     layoutSizingVertical: z.string().optional(),
+    layoutPositioning: z.string().optional(),
     constraints: z
       .object({ horizontal: z.string(), vertical: z.string() })
       .optional(),
     absoluteBoundingBox: z
       .object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })
       .nullish(),
+    blendMode: z.string().optional(),
+    clipsContent: z.boolean().optional(),
+    paddingTop: z.number().optional(),
+    paddingBottom: z.number().optional(),
+    paddingLeft: z.number().optional(),
+    paddingRight: z.number().optional(),
+    rotation: z.number().optional(),
+    cornerRadius: z.number().optional(),
+    isMask: z.boolean().optional(),
     reactions: z.array(z.unknown()).optional(),
     exportSettings: z.array(z.unknown()).optional(),
     annotations: z.array(z.unknown()).optional(),

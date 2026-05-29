@@ -45,7 +45,16 @@ export function groupByFrame(
         total: 0,
         names: 0,
         structure: 0,
-        structureBreakdown: { hidden: 0, 'empty-container': 0, 'detached-instance': 0 },
+        structureBreakdown: {
+          hidden: 0,
+          'empty-container': 0,
+          'detached-instance': 0,
+          'single-child-group': 0,
+          'passthrough-frame': 0,
+          'wrapper-frame': 0,
+          'redundant-frame': 0,
+          'group-in-autolayout': 0,
+        },
       };
       map.set(id, entry);
     }
@@ -71,7 +80,7 @@ export function groupByFrame(
 export function formatPinComment(s: PerFrameSummary): string {
   const lines = [`🔍 Pre-handover: ${s.total} issue${s.total !== 1 ? 's' : ''} in this screen`, ''];
   if (s.names > 0) {
-    lines.push(`• ${s.names} auto-named layer${s.names !== 1 ? 's' : ''} → Handover › Names tab`);
+    lines.push(`• ${s.names} layer naming issue${s.names !== 1 ? 's' : ''} → Handover › Names tab`);
   }
   if (s.structure > 0) {
     const b = s.structureBreakdown;
@@ -79,6 +88,13 @@ export function formatPinComment(s: PerFrameSummary): string {
     if (b.hidden > 0) parts.push(`${b.hidden} hidden`);
     if (b['empty-container'] > 0) parts.push(`${b['empty-container']} empty`);
     if (b['detached-instance'] > 0) parts.push(`${b['detached-instance']} detached`);
+    const nesting =
+      (b['single-child-group'] ?? 0) +
+      (b['passthrough-frame'] ?? 0) +
+      (b['wrapper-frame'] ?? 0) +
+      (b['redundant-frame'] ?? 0) +
+      (b['group-in-autolayout'] ?? 0);
+    if (nesting > 0) parts.push(`${nesting} redundant nesting`);
     lines.push(`• ${s.structure} structural (${parts.join(', ')}) → Handover › Clean tab`);
   }
   return lines.join('\n');

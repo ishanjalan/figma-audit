@@ -2,14 +2,16 @@
  * Minimal Figma document tree for testing checkNames.
  *
  * Scenarios covered:
- *  - Frame with auto-generated name + auto-layout → SHOULD flag (canInferName returns true)
+ *  - Frame with auto-generated name + auto-layout → SHOULD flag (generic-name)
  *  - Frame with auto-generated name + no layout, no text → SHOULD NOT flag (plugin can't rename)
- *  - Frame with semantic name → SHOULD NOT flag
+ *  - Frame with PascalCase name → SHOULD NOT flag
  *  - Rectangle with auto-generated name, no text/layout → SHOULD NOT flag
- *  - Frame with auto-generated name containing a TEXT child → SHOULD flag
+ *  - Frame with auto-generated name containing a TEXT child → SHOULD flag (generic-name)
  *  - Locked node → SHOULD NOT flag
  *  - Node with reactions → SHOULD NOT flag (intentional marker)
- *  - Top-level frame with auto-generated name → SHOULD flag (isTopLevel = true)
+ *  - Top-level frame with auto-generated name → SHOULD flag (generic-name)
+ *  - FRAME with non-PascalCase human-given name → SHOULD flag (non-standard-case)
+ *  - Node inside Smart Animate frame → SHOULD NOT flag non-standard-case
  */
 
 import type { FigmaNode } from '../../../api/types.ts';
@@ -48,13 +50,40 @@ export const nameFixture: FigmaNode = {
             { id: 'txt1', name: 'Button label', type: 'TEXT', children: [] },
           ],
         },
-        // ❌ Should NOT flag: semantic name
+        // ❌ Should NOT flag: already PascalCase name
         {
           id: 'f4',
-          name: 'Hero Banner',
+          name: 'HeroBanner',
           type: 'FRAME',
           layoutMode: 'HORIZONTAL',
           children: [],
+        },
+
+        // ✅ Should flag non-standard-case: FRAME with human-given non-PascalCase name
+        {
+          id: 'f10',
+          name: 'hero cta',
+          type: 'FRAME',
+          layoutMode: 'HORIZONTAL',
+          children: [],
+        },
+
+        // ❌ Should NOT flag non-standard-case: top-level frame has Smart Animate reaction,
+        // so children must not be auto-renamed (would break prototype animation matching)
+        {
+          id: 'sa-frame',
+          name: 'SmartAnimateScreen',
+          type: 'FRAME',
+          reactions: [{ action: { type: 'NODE', transition: { type: 'SMART_ANIMATE' } } }],
+          children: [
+            {
+              id: 'sa-child',
+              name: 'card layout',
+              type: 'FRAME',
+              layoutMode: 'VERTICAL',
+              children: [],
+            },
+          ],
         },
         // ❌ Should NOT flag: Rectangle with generic name, no text/layout (plugin can't rename)
         {
