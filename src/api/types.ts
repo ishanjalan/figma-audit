@@ -26,6 +26,7 @@ export interface FigmaNode {
   // Visual identity — used to detect chrome-less passthrough/wrapper/redundant frames.
   blendMode?: string;
   clipsContent?: boolean;
+  overflowDirection?: string; // 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'BOTH'
   paddingTop?: number;
   paddingBottom?: number;
   paddingLeft?: number;
@@ -85,6 +86,7 @@ export const FigmaNodeSchema: z.ZodType<FigmaNode> = z.lazy(() =>
       .nullish(),
     blendMode: z.string().optional(),
     clipsContent: z.boolean().optional(),
+    overflowDirection: z.string().optional(),
     paddingTop: z.number().optional(),
     paddingBottom: z.number().optional(),
     paddingLeft: z.number().optional(),

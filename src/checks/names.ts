@@ -3,13 +3,14 @@
 // adapts the REST FigmaNode tree and maps shared NameDetection to the audit's
 // NameIssue shape.
 //
-// The shared detectName function covers: 'default' (generic Figma names),
-// 'low-info', 'copy-suffix', 'short', 'duplicate-sibling', 'non-standard-case',
-// 'smart-animate-match'. The audit previously only surfaced 'generic-name' and
-// 'non-standard-case'; now it surfaces all shared reasons via this bridge.
+// Performance: the RuleNode tree is built ONCE per top-level frame via
+// toRuleNode(), then the already-wired tree is walked. This gives O(n) work
+// instead of the O(n²) that would result from calling toRuleNode() per node.
+// It also means every node has a correct parent chain, so isInSmartAnimateFrame
+// and isInsideComponent work correctly during detectName().
 
 import { detectName, findDuplicateSiblings } from '@rules/scan.ts';
-import type { NameReason } from '@rules/node.ts';
+import type { RuleNode, NameReason } from '@rules/node.ts';
 import type { FigmaNode } from '../api/types.ts';
 import { toRuleNode } from './rule-adapter.ts';
 
@@ -26,40 +27,62 @@ export interface NameIssue {
   topLevelFrameName: string;
 }
 
-interface ScanCtx {
-  ancestors: string[];
-  topLevelFrameId: string;
-  topLevelFrameName: string;
+// Build a breadcrumb path by walking the pre-wired RuleNode parent chain.
+function pathFromParents(node: RuleNode): string {
+  const parts: string[] = [];
+  let cur = node.parent;
+  while (cur) {
+    parts.unshift(cur.name);
+    cur = cur.parent;
+  }
+  return parts.join(' › ');
 }
 
-function scanNode(node: FigmaNode, ctx: ScanCtx, issues: NameIssue[]): void {
+interface TLF { topLevelFrameId: string; topLevelFrameName: string }
+
+// Walk a pre-built, fully parent-wired RuleNode tree. detectName() receives
+// correct parent context so SA-frame and inside-component guards work.
+function walkRuleNode(node: RuleNode, tlf: TLF, issues: NameIssue[]): void {
   if (node.locked) return;
-  if (node.reactions && node.reactions.length > 0) return;
-  if (node.exportSettings && node.exportSettings.length > 0) return;
-  if (node.annotations && node.annotations.length > 0) return;
+  if (node.reactions.length > 0) return;
+  if (node.exportSettings.length > 0) return;
+  if (node.annotations.length > 0) return;
 
-  const path = ctx.ancestors.join(' › ');
-  const ruleNode = toRuleNode(node);
-  const detection = detectName(ruleNode);
-
+  const detection = detectName(node);
   if (detection) {
     issues.push({
       nodeId: node.id,
       nodeName: node.name,
       nodeType: node.type,
       reason: detection.reason,
-      path,
-      topLevelFrameId: ctx.topLevelFrameId,
-      topLevelFrameName: ctx.topLevelFrameName,
+      path: pathFromParents(node),
+      ...tlf,
     });
   }
 
   // Don't recurse into instance or boolean-op internals.
   if (node.type === 'INSTANCE' || node.type === 'BOOLEAN_OPERATION') return;
 
-  const childCtx = { ...ctx, ancestors: [...ctx.ancestors, node.name] };
-  for (const child of node.children ?? []) {
-    scanNode(child, childCtx, issues);
+  for (const child of node.children) {
+    walkRuleNode(child, tlf, issues);
+  }
+}
+
+// Append duplicate-sibling issues that detectName() didn't already surface.
+// findDuplicateSiblings uses the pre-built tree — no extra toRuleNode() call.
+function addDuplicateSiblingIssues(root: RuleNode, tlf: TLF, issues: NameIssue[]): void {
+  const dups = findDuplicateSiblings(root);
+  for (const dup of dups) {
+    if (!issues.find((i) => i.nodeId === dup.node.id && i.reason === 'duplicate-sibling')) {
+      issues.push({
+        nodeId: dup.node.id,
+        nodeName: dup.node.name,
+        nodeType: dup.node.type,
+        reason: 'duplicate-sibling',
+        path: pathFromParents(dup.node),
+        ...tlf,
+      });
+    }
   }
 }
 
@@ -70,50 +93,17 @@ export function checkNames(document: FigmaNode): NameIssue[] {
     for (const topNode of page.children ?? []) {
       if (topNode.type === 'SECTION') {
         for (const child of topNode.children ?? []) {
-          scanNode(
-            child,
-            {
-              ancestors: [page.name, topNode.name],
-              topLevelFrameId: child.id,
-              topLevelFrameName: child.name,
-            },
-            issues,
-          );
+          // Build the RuleNode tree once; reuse it for both detection and dup-sibling.
+          const root = toRuleNode(child);
+          const tlf: TLF = { topLevelFrameId: child.id, topLevelFrameName: child.name };
+          walkRuleNode(root, tlf, issues);
+          addDuplicateSiblingIssues(root, tlf, issues);
         }
       } else {
-        scanNode(
-          topNode,
-          {
-            ancestors: [page.name],
-            topLevelFrameId: topNode.id,
-            topLevelFrameName: topNode.name,
-          },
-          issues,
-        );
-      }
-    }
-  }
-
-  // Duplicate-sibling detection: the shared findDuplicateSiblings operates on
-  // full RuleNode subtrees. Run it on each top-level frame to surface duplicates.
-  for (const page of document.children ?? []) {
-    for (const topNode of page.children ?? []) {
-      const ruleNode = toRuleNode(topNode);
-      const dups = findDuplicateSiblings(ruleNode);
-      for (const dup of dups) {
-        // Only add if not already reported by the scan above (detectName also
-        // catches duplicate-sibling as a reason).
-        if (!issues.find((i) => i.nodeId === dup.node.id && i.reason === 'duplicate-sibling')) {
-          issues.push({
-            nodeId: dup.node.id,
-            nodeName: dup.node.name,
-            nodeType: dup.node.type,
-            reason: 'duplicate-sibling',
-            path: dup.node.parent ? dup.node.parent.name : '',
-            topLevelFrameId: topNode.id,
-            topLevelFrameName: topNode.name,
-          });
-        }
+        const root = toRuleNode(topNode);
+        const tlf: TLF = { topLevelFrameId: topNode.id, topLevelFrameName: topNode.name };
+        walkRuleNode(root, tlf, issues);
+        addDuplicateSiblingIssues(root, tlf, issues);
       }
     }
   }

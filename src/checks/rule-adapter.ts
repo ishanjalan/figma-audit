@@ -65,7 +65,7 @@ function buildRuleNode(node: FigmaNode, parentBB: BB | null): RuleNode {
     paddingBottom: node.paddingBottom ?? 0,
     paddingLeft: node.paddingLeft ?? 0,
     constraints: node.constraints,
-    overflowDirection: undefined, // not exposed in REST response
+    overflowDirection: node.overflowDirection as RuleNode['overflowDirection'],
     clipsContent: node.clipsContent ?? false,
 
     fills: extractFills(node),
