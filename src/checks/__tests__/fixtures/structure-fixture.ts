@@ -5,6 +5,10 @@
  * non-zero absoluteBoundingBox so the shared scanner's zero-size check fires
  * only when explicitly tested, not as a side-effect of missing geometry.
  *
+ * All top-level frames are marked READY_FOR_DEV so they pass the dev-status
+ * filter. One node (skip1) is deliberately left without devStatus to verify
+ * the filter excludes it.
+ *
  * Scenarios covered:
  *  hidden-layer (D3: was 'hidden' in the pre-Phase-2 audit):
  *    - visible: false node → SHOULD flag as 'hidden-layer'
@@ -16,7 +20,6 @@
  *    - GROUP with no children → SHOULD flag
  *  transparent-fill:
  *    - FRAME with no children but fill visible:false → SHOULD flag as 'transparent-fill'
- *      (the shared scanner catches the invisible fill before the empty-container check)
  *  detached-instance:
  *    - INSTANCE with no componentId → SHOULD flag
  *    - INSTANCE with componentId present → SHOULD NOT flag
@@ -25,11 +28,14 @@
  *    - reactions/exportSettings/annotations → SHOULD NOT flag
  *    - SECTION wrapper → SHOULD NOT flag the section itself
  *    - BOOLEAN_OPERATION → SHOULD NOT flag or recurse
+ *  dev-status filter:
+ *    - node without devStatus (skip1) → SHOULD NOT appear in issues at all
  */
 
 import type { FigmaNode } from '../../../api/types.ts';
 
 const bb = (w = 100, h = 100) => ({ absoluteBoundingBox: { x: 0, y: 0, width: w, height: h } });
+const rfd = { devStatus: { type: 'READY_FOR_DEV' as const } };
 
 export const structureFixture: FigmaNode = {
   id: 'doc',
@@ -43,20 +49,19 @@ export const structureFixture: FigmaNode = {
       children: [
         // ✅ hidden-layer: visible false → should flag
         {
-          id: 'h1',
+          id: 'h1', ...rfd,
           name: 'Hidden Layer',
           type: 'FRAME',
           visible: false,
           ...bb(),
           children: [
-            // child of hidden — should NOT be separately flagged
             { id: 'h1-child', name: 'Child of hidden', type: 'FRAME', ...bb(), children: [] },
           ],
         },
 
         // ❌ hidden, but bound to component bool prop → should NOT flag
         {
-          id: 'h2',
+          id: 'h2', ...rfd,
           name: 'Loading Spinner',
           type: 'INSTANCE',
           componentId: 'spinner-master',
@@ -67,17 +72,11 @@ export const structureFixture: FigmaNode = {
         },
 
         // ✅ empty-container: bare frame no children no fills → should flag
-        {
-          id: 'e1',
-          name: 'Empty Frame',
-          type: 'FRAME',
-          ...bb(),
-          children: [],
-        },
+        { id: 'e1', ...rfd, name: 'Empty Frame', type: 'FRAME', ...bb(), children: [] },
 
         // ❌ empty-container: frame with visible fill → visual leaf, should NOT flag
         {
-          id: 'e2',
+          id: 'e2', ...rfd,
           name: 'Background Block',
           type: 'FRAME',
           fills: [{ type: 'SOLID', visible: true }],
@@ -85,11 +84,9 @@ export const structureFixture: FigmaNode = {
           children: [],
         },
 
-        // ✅ transparent-fill: frame with fill explicitly set to visible:false.
-        // The shared scanner fires 'transparent-fill' (not 'empty-container') because
-        // the fill IS present but invisible — a different issue class than truly empty.
+        // ✅ transparent-fill: fill is present but invisible
         {
-          id: 'e3',
+          id: 'e3', ...rfd,
           name: 'Invisible Fill Frame',
           type: 'FRAME',
           fills: [{ type: 'SOLID', visible: false }],
@@ -98,50 +95,29 @@ export const structureFixture: FigmaNode = {
         },
 
         // ✅ empty-container: group no children → should flag
-        {
-          id: 'e4',
-          name: 'Empty Group',
-          type: 'GROUP',
-          ...bb(),
-          children: [],
-        },
+        { id: 'e4', ...rfd, name: 'Empty Group', type: 'GROUP', ...bb(), children: [] },
 
         // ✅ detached-instance: INSTANCE with no componentId → should flag
-        {
-          id: 'di1',
-          name: 'Broken Component',
-          type: 'INSTANCE',
-          // componentId intentionally absent
-          ...bb(),
-          children: [],
-        },
+        { id: 'di1', ...rfd, name: 'Broken Component', type: 'INSTANCE', ...bb(), children: [] },
 
         // ❌ instance with valid componentId → should NOT flag
         {
-          id: 'di2',
+          id: 'di2', ...rfd,
           name: 'Valid Instance',
           type: 'INSTANCE',
           componentId: 'master-xyz',
           ...bb(),
           children: [
-            // internals should not be walked
             { id: 'di2-child', name: 'Empty Frame', type: 'FRAME', ...bb(), children: [] },
           ],
         },
 
         // ❌ locked → should not flag at all
-        {
-          id: 'lk1',
-          name: 'Locked Empty',
-          type: 'FRAME',
-          locked: true,
-          ...bb(),
-          children: [],
-        },
+        { id: 'lk1', ...rfd, name: 'Locked Empty', type: 'FRAME', locked: true, ...bb(), children: [] },
 
         // ❌ reactions → intentional marker, skip
         {
-          id: 'rx1',
+          id: 'rx1', ...rfd,
           name: 'Interactive Frame',
           type: 'FRAME',
           reactions: [{ trigger: { type: 'ON_CLICK' } }],
@@ -149,24 +125,35 @@ export const structureFixture: FigmaNode = {
           children: [],
         },
 
-        // SECTION passthrough — section itself not flagged, but children are walked
+        // SECTION marked READY_FOR_DEV — children are included
         {
-          id: 'sec1',
+          id: 'sec1', ...rfd,
           name: 'Design Section',
           type: 'SECTION',
           children: [
-            // ✅ empty frame inside section → should flag
             { id: 'sec-child', name: 'Empty inside section', type: 'FRAME', ...bb(), children: [] },
           ],
         },
 
         // BOOLEAN_OPERATION — not walked, not flagged
         {
-          id: 'bo1',
+          id: 'bo1', ...rfd,
           name: 'Icon Shape',
           type: 'BOOLEAN_OPERATION',
           children: [
             { id: 'bo-child', name: 'Some Vector', type: 'VECTOR', ...bb(), children: [] },
+          ],
+        },
+
+        // ── dev-status filter test ──────────────────────────────────────────
+        // No devStatus → excluded by readyFrames; issues inside are never reported.
+        {
+          id: 'skip1',
+          name: 'Not Ready Frame',
+          type: 'FRAME',
+          ...bb(),
+          children: [
+            { id: 'skip1-child', name: 'Empty Frame', type: 'FRAME', ...bb(), children: [] },
           ],
         },
       ],

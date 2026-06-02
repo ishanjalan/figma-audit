@@ -106,4 +106,12 @@ describe('checkStructure', () => {
     // e4 (empty-container), di1 (detached-instance), sec-child (empty-container) = 6
     expect(issues.length).toBe(6);
   });
+
+  // ── dev-status filter ────────────────────────────────────────────────────────
+
+  it('does NOT report issues inside a frame with no devStatus', () => {
+    // skip1 has no devStatus — readyFrames excludes it entirely
+    expect(ids()).not.toContain('skip1');
+    expect(ids()).not.toContain('skip1-child');
+  });
 });

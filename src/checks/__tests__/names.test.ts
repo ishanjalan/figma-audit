@@ -104,4 +104,11 @@ describe('checkNames', () => {
     // total = 5
     expect(issues.length).toBe(5);
   });
+
+  // ── dev-status filter ────────────────────────────────────────────────────────
+
+  it('does NOT report issues inside a frame with no devStatus', () => {
+    // skip-names has no devStatus — readyFrames excludes it entirely
+    expect(ids()).not.toContain('skip-names');
+  });
 });

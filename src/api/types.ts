@@ -48,6 +48,10 @@ export interface FigmaNode {
   // When the master component is deleted, componentId is absent/null,
   // making this a detached (orphaned) instance.
   componentId?: string | null;
+
+  // Figma "Ready for dev" / "Completed" status set by designers.
+  // Only present on frames and sections where the status has been explicitly set.
+  devStatus?: { type: 'READY_FOR_DEV' | 'COMPLETED' } | null;
 }
 
 const FigmaFillSchema = z.object({
@@ -99,6 +103,7 @@ export const FigmaNodeSchema: z.ZodType<FigmaNode> = z.lazy(() =>
     annotations: z.array(z.unknown()).optional(),
     componentPropertyReferences: z.record(z.string()).optional(),
     componentId: z.string().nullish(),
+    devStatus: z.object({ type: z.enum(['READY_FOR_DEV', 'COMPLETED']) }).nullish(),
   })
 );
 

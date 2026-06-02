@@ -13,6 +13,7 @@ import { detectName, findDuplicateSiblings } from '@rules/scan.ts';
 import type { RuleNode, NameReason } from '@rules/node.ts';
 import type { FigmaNode } from '../api/types.ts';
 import { toRuleNode } from './rule-adapter.ts';
+import { readyFrames } from './dev-filter.ts';
 
 // Re-export the shared NameReason so callers get the full vocabulary.
 export type NameIssueReason = NameReason;
@@ -90,21 +91,13 @@ export function checkNames(document: FigmaNode): NameIssue[] {
   const issues: NameIssue[] = [];
 
   for (const page of document.children ?? []) {
-    for (const topNode of page.children ?? []) {
-      if (topNode.type === 'SECTION') {
-        for (const child of topNode.children ?? []) {
-          // Build the RuleNode tree once; reuse it for both detection and dup-sibling.
-          const root = toRuleNode(child);
-          const tlf: TLF = { topLevelFrameId: child.id, topLevelFrameName: child.name };
-          walkRuleNode(root, tlf, issues);
-          addDuplicateSiblingIssues(root, tlf, issues);
-        }
-      } else {
-        const root = toRuleNode(topNode);
-        const tlf: TLF = { topLevelFrameId: topNode.id, topLevelFrameName: topNode.name };
-        walkRuleNode(root, tlf, issues);
-        addDuplicateSiblingIssues(root, tlf, issues);
-      }
+    // Only audit frames/sections marked "Ready for dev" by the designer.
+    for (const { frame } of readyFrames(page)) {
+      // Build the RuleNode tree once; reuse it for both detection and dup-sibling.
+      const root = toRuleNode(frame);
+      const tlf: TLF = { topLevelFrameId: frame.id, topLevelFrameName: frame.name };
+      walkRuleNode(root, tlf, issues);
+      addDuplicateSiblingIssues(root, tlf, issues);
     }
   }
 

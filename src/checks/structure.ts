@@ -11,6 +11,7 @@ import { scanStructure } from '@rules/scan.ts';
 import type { IssueType } from '@rules/node.ts';
 import type { FigmaNode } from '../api/types.ts';
 import { toRuleNode } from './rule-adapter.ts';
+import { readyFrames } from './dev-filter.ts';
 
 // Re-export the shared IssueType directly so callers get one vocabulary.
 export type StructureIssueKind = IssueType;
@@ -27,53 +28,25 @@ export interface StructureIssue {
   topLevelFrameName: string;
 }
 
-// Walk up the RuleNode parent chain to reconstruct the breadcrumb path.
-// The shared scan already stores path on Issue, but the audit also needs
-// topLevelFrame info which we derive from the document walk below.
-function getTopLevelFrame(
-  page: FigmaNode,
-  topLevelNode: FigmaNode,
-): { topLevelFrameId: string; topLevelFrameName: string } {
-  return { topLevelFrameId: topLevelNode.id, topLevelFrameName: topLevelNode.name };
-}
 
 export function checkStructure(document: FigmaNode): StructureIssue[] {
   const result: StructureIssue[] = [];
 
   for (const page of document.children ?? []) {
-    for (const topNode of page.children ?? []) {
-      if (topNode.type === 'SECTION') {
-        // Sections are screen-grouping containers. Treat each child as a
-        // top-level screen for pinning purposes.
-        for (const child of topNode.children ?? []) {
-          const ruleNode = toRuleNode(child);
-          const issues = scanStructure(ruleNode);
-          const tlf = { topLevelFrameId: child.id, topLevelFrameName: child.name };
-          for (const issue of issues) {
-            result.push({
-              nodeId: issue.id,
-              nodeName: issue.name,
-              nodeType: issue.nodeType,
-              kind: issue.type,
-              path: issue.path,
-              ...tlf,
-            });
-          }
-        }
-      } else {
-        const ruleNode = toRuleNode(topNode);
-        const issues = scanStructure(ruleNode);
-        const tlf = getTopLevelFrame(page, topNode);
-        for (const issue of issues) {
-          result.push({
-            nodeId: issue.id,
-            nodeName: issue.name,
-            nodeType: issue.nodeType,
-            kind: issue.type,
-            path: issue.path,
-            ...tlf,
-          });
-        }
+    // Only audit frames/sections marked "Ready for dev" by the designer.
+    for (const { frame } of readyFrames(page)) {
+      const ruleNode = toRuleNode(frame);
+      const issues = scanStructure(ruleNode);
+      const tlf = { topLevelFrameId: frame.id, topLevelFrameName: frame.name };
+      for (const issue of issues) {
+        result.push({
+          nodeId: issue.id,
+          nodeName: issue.name,
+          nodeType: issue.nodeType,
+          kind: issue.type,
+          path: issue.path,
+          ...tlf,
+        });
       }
     }
   }
