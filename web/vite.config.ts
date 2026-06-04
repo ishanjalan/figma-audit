@@ -8,4 +8,10 @@ const base = process.env.VITE_BASE ?? '/';
 export default defineConfig({
   base,
   plugins: [svelte()],
+  resolve: {
+    alias: {
+      // Mirror the root tsconfig so src/checks imports resolve during the web build.
+      '@rules': new URL('../packages/handover-rules/src', import.meta.url).pathname,
+    },
+  },
 });
